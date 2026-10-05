@@ -25,4 +25,14 @@ I dati sono salvati in `tesserati-data.json`, in una cartella modificabile da Im
 Il **backup** è un file firmato con SHA-256: al ripristino l'app verifica firma e coerenza dei dati prima di sostituire
 qualcosa e salva una copia dei dati attuali (`…prima-del-ripristino.json`).
 
+## Build automatica (GitHub Actions)
+`.github/workflows/build.yml`:
+- a ogni push e pull request esegue i test;
+- sui push su `main` costruisce l'app per **Mac Apple Silicon** e **Windows x64** (file scaricabili da *Actions → run → Artifacts*);
+- creando un tag di versione (`git tag v1.0.1 && git push --tags`, con la stessa versione di `package.json`)
+  pubblica anche una *Release* con dmg, exe e zip.
+
+Le app non sono firmate: su Mac clic destro → Apri, su Windows "Ulteriori informazioni → Esegui comunque".
+L'icona è `build/icon.png` (ricavata da `logo.png`).
+
 © Fioravante Capaccio

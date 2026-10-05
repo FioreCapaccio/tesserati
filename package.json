@@ -22,6 +22,7 @@
       "preload.js",
       "core/**",
       "src/**",
+      "build/icon.png",
       "package.json"
     ],
     "directories": {

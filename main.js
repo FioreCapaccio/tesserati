@@ -82,6 +82,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1100, minHeight: 680,
     title: 'Tesserati',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#f6f1e9',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -260,6 +261,7 @@ handle('print:run', async ({ html, mode, receipts, nextReceipt }) => {
 app.whenReady().then(() => {
   app.setAboutPanelOptions({ applicationName: 'Tesserati', applicationVersion: app.getVersion(), version: '', copyright: COPYRIGHT });
   loadState();
+  if (process.platform === 'darwin' && app.dock) { try { app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); } catch (_) {} }
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
