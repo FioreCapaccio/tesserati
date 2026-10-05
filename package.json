@@ -1,0 +1,46 @@
+{
+  "name": "tesserati",
+  "productName": "Tesserati",
+  "version": "1.0.0",
+  "description": "Gestione tesserati, ricevute e scadenze per associazione culturale teatrale",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/core.test.js",
+    "dist:mac": "electron-builder --mac dmg zip --arm64",
+    "dist:win": "electron-builder --win nsis zip --x64",
+    "dist": "electron-builder --mac dmg zip --arm64 --win nsis zip --x64"
+  },
+  "build": {
+    "appId": "it.associazione.tesserati",
+    "productName": "Tesserati",
+    "files": [
+      "main.js",
+      "preload.js",
+      "core/**",
+      "src/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3"
+  }
+}
