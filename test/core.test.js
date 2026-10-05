@@ -70,3 +70,60 @@ if (fs.existsSync(csvPath)) {
   });
 } else console.log('CSV reale non trovato, test saltati:', csvPath);
 console.log(`\n${n} test superati`);
+
+// ---- Ricerca del CSV nella cartella Download ----
+{
+  const os = require('os');
+  const { newestMatching } = require('../core/csv');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dl-'));
+  const w = (name, ageSec) => { const f = path.join(dir, name); fs.writeFileSync(f, 'x'); const tm = new Date(Date.now() - ageSec * 1000); fs.utimesSync(f, tm, tm); };
+  t('Download: nessun file Younity -> null', () => { w('altro.csv', 5); w('foto.png', 1); assert.strictEqual(newestMatching(dir), null); });
+  t('Download: sceglie il Younity più recente (anche "Younity (1).csv")', () => {
+    w('Younity.csv', 600); w('Younity (1).csv', 10); w('younity-vecchio.CSV', 3000);
+    assert.strictEqual(path.basename(newestMatching(dir)), 'Younity (1).csv');
+  });
+  t('Download: cartella inesistente -> null', () => assert.strictEqual(newestMatching(path.join(dir, 'no')), null));
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// ---- Backup con controllo di integrità ----
+{
+  const B = require('../core/backup');
+  const st = S.emptyState();
+  S.importRecords(st, [
+    { id: '1', nome: 'Ada', cognome: 'Rossi', nascita: '1990-01-01', provNascita: 'PE', cf: 'X', email: 'a@b.it', cell: '1', indirizzo: 'Via', citta: 'Pescara', iscrizione: '2026-01-10', iscrizioneOra: '', scadenza: '2027-01-09', stato: 'Attivo' },
+  ], {});
+  const bk = B.makeBackup(st, '1.0.0');
+  t('backup integro: verifica ok e riepilogo', () => {
+    const v = B.verifyBackup(JSON.parse(JSON.stringify(bk)));
+    assert.ok(v.ok, v.errors.join('; '));
+    assert.ok(v.signed);
+    assert.strictEqual(v.summary.memberships, 1);
+  });
+  t('backup manomesso: firma non corrispondente', () => {
+    const bad = JSON.parse(JSON.stringify(bk));
+    bad.data.persons['1'].nome = 'Mallory';
+    const v = B.verifyBackup(bad);
+    assert.ok(!v.ok);
+    assert.ok(v.errors.some((e) => e.includes('Firma di integrità')));
+  });
+  t('backup con dati incoerenti (anche con firma ricalcolata) è rifiutato', () => {
+    const bad = JSON.parse(JSON.stringify(bk));
+    bad.data.memberships['1_2026-01-10'].personId = '999';
+    bad.sha256 = B.sha256(JSON.stringify(bad.data));
+    const v = B.verifyBackup(bad);
+    assert.ok(!v.ok);
+    assert.ok(v.errors.some((e) => e.includes('chiave incoerente') || e.includes('anagrafica')));
+  });
+  t('backup troncato / file estraneo rifiutati', () => {
+    assert.ok(!B.verifyBackup({ foo: 1 }).ok);
+    assert.ok(!B.verifyBackup(null).ok);
+    const bad = JSON.parse(JSON.stringify(bk)); delete bad.data.memberships;
+    assert.ok(!B.verifyBackup(bad).ok);
+  });
+  t('copia semplice senza firma accettata solo se coerente', () => {
+    const v = B.verifyBackup(JSON.parse(JSON.stringify(st)));
+    assert.ok(v.ok && !v.signed);
+  });
+}
+console.log(`\n${n} test superati (totale)`);

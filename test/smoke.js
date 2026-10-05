@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow } = require('electron');
 const { readMembers } = require('../core/csv');
+const B = require('../core/backup');
 
 module.exports = ({ win, state, saveState, S, app }) => {
   const out = process.env.TESSERATI_OUT;
@@ -20,11 +21,10 @@ module.exports = ({ win, state, saveState, S, app }) => {
       // Primo import reale + 2 nuovi iscritti
       const { records } = readMembers(fs.readFileSync(process.env.TESSERATI_CSV));
       S.importRecords(st, records, { file: 'Younity.csv' });
-      st.settings.csvPath = process.env.TESSERATI_CSV;
       st.settings.assoc = { nome: 'Associazione Culturale Teatrale “Il Sipario”', indirizzo: 'Via del Teatro 12, 65100 Pescara', cf: '91012345678', telefono: '085 1234567', email: 'info@ilsipario.it', logo: '', nota: 'Ricevuta di tesseramento per quota associativa, non soggetta a IVA.' };
       st.settings.nextReceipt = 124;
       st.settings.receiptPrefix = '2026/';
-      const nuovi = records.slice(0, 5).map((r, i) => ({ ...r, id: '99000' + i, iscrizione: '2026-10-0' + (i + 1), scadenza: '2027-09-3' + (i % 2), nome: ['Giulia', 'Marco', 'Anna Maria', 'Luca', 'Chiara'][i], cognome: ['Bianchi', 'D’Angelo', 'De Luca', 'Verdi', 'Esposito'][i], cf: 'XXXXXX00X00X000' + i }));
+      const nuovi = records.slice(0, 5).map((r, i) => ({ ...r, id: '99000' + i, iscrizione: '2026-10-0' + (i + 1), scadenza: '2027-09-30', nome: ['Giulia', 'Marco', 'Anna Maria', 'Luca', 'Chiara'][i], cognome: ['Bianchi', 'D’Angelo', 'De Luca', 'Verdi', 'Esposito'][i], cf: 'XXXXXX00X00X000' + i }));
       S.importRecords(st, nuovi, { file: 'Younity.csv' });
       saveState();
       win.reload();
@@ -58,7 +58,34 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await js(`document.querySelector('[data-cal=anno]').click()`);
       await shot('06-calendario-anno');
       await js(`document.querySelector('[data-nav=impostazioni]').click()`);
+      win.setSize(1440, 2300); await wait(400);
       await shot('07-impostazioni');
+      win.setSize(1440, 900); await wait(300);
+      log('csv risolto:', JSON.stringify(await js(`App.csv`)));
+      log('versione/copyright:', await js(`App.version + ' | ' + App.copyright`));
+      log('footer in ogni vista:', JSON.stringify(await js(`(async()=>{const o={};for(const v of ['lista','stampare','calendario','impostazioni']){document.querySelector('[data-nav='+v+']').click();await new Promise(r=>setTimeout(r,80));o[v]=document.querySelector('.app-foot')?.textContent}return o})()`)));
+
+      // ---- backup / ripristino ----
+      const good = path.join(out, 'copia-buona.json');
+      const bad = path.join(out, 'copia-manomessa.json');
+      const bk = B.makeBackup(state(), '1.0.0');
+      fs.writeFileSync(good, JSON.stringify(bk));
+      const tam = JSON.parse(JSON.stringify(bk)); tam.data.persons[Object.keys(tam.data.persons)[0]].cognome = 'MANOMESSO';
+      fs.writeFileSync(bad, JSON.stringify(tam));
+      const insp = (f) => { const v = B.verifyBackup(JSON.parse(fs.readFileSync(f, 'utf8'))); return { path: f, name: path.basename(f), ok: v.ok, errors: v.errors, signed: v.signed, summary: v.summary }; };
+      await js(`document.querySelector('[data-nav=impostazioni]').click()`);
+      await js(`showRestoreDialog(${JSON.stringify(insp(good))})`); await shot('08-ripristino-ok');
+      await js(`closeModal()`);
+      await js(`showRestoreDialog(${JSON.stringify(insp(bad))})`); await shot('09-ripristino-manomesso');
+      await js(`closeModal()`);
+      const before = Object.keys(state().memberships).length;
+      const rejected = await js(`window.api.applyBackup(${JSON.stringify(bad)}).then(()=>'ACCETTATO (ERRORE!)', e=>'rifiutato: '+e.message)`);
+      log('copia manomessa ->', rejected, '| tessere invariate:', Object.keys(state().memberships).length === before);
+      // modifica dei dati, poi ripristino della copia buona
+      S.updateMemberships(state(), Object.keys(state().memberships).slice(0, 3), { printed: false });
+      const applied = await js(`window.api.applyBackup(${JSON.stringify(good)}).then(r=>'ok, copia di sicurezza: '+r.safety, e=>'ERRORE '+e.message)`);
+      log('ripristino copia buona ->', applied, '| da stampare dopo:', Object.values(state().memberships).filter((m) => !m.printed).length);
+      log('file copia di sicurezza esiste:', fs.existsSync(path.join(process.env.TESSERATI_USERDATA, 'tesserati-data.json.prima-del-ripristino.json')));
       const errs = await js(`window.__errs || []`);
       log('fine', errs);
     } catch (e) {

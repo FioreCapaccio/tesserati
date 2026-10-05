@@ -121,4 +121,15 @@ function readMembers(buf) {
   return { records, warnings, totalRows: rows.length - hIdx - 1 };
 }
 
-module.exports = { decodeBuffer, parseCsv, parseDate, smartCase, readMembers };
+// Nella cartella indicata, il file Younity*.csv modificato più di recente (es. "Younity (1).csv").
+function newestMatching(dir) {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const list = fs.readdirSync(dir).filter((n) => /^younity.*\.csv$/i.test(n))
+      .map((n) => ({ n, t: fs.statSync(path.join(dir, n)).mtimeMs })).sort((a, b) => b.t - a.t);
+    return list[0] ? path.join(dir, list[0].n) : null;
+  } catch (_) { return null; }
+}
+
+module.exports = { newestMatching, decodeBuffer, parseCsv, parseDate, smartCase, readMembers };
