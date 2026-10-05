@@ -18,7 +18,7 @@
 
   function cell(item, assoc) {
     if (!item) return '<div class="cell"></div>';
-    const { p, m, label, quota, date } = item;
+    const { p, m, label, quota, date, method } = item;
     const q = formatQuota(quota);
     const nasc = [fmtDate(p.nascita), p.provNascita ? `(${p.provNascita})` : p.cf && /Z\d{3}/.test(p.cf.slice(11, 15)) ? '(estero)' : ''].filter(Boolean).join(' ');
     const resid = [p.indirizzo, p.citta].filter(Boolean).join(' – ');
@@ -48,6 +48,7 @@
         ${row('Stato', m.stato)}
       </div>
       <div class="quota"><span>Quota associativa versata</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
+      <div class="pay"><span class="l2">Metodo di pagamento</span>${method ? `<b>${esc(method)}</b>` : ['Contanti', 'POS', 'Bonifico'].map((x) => `<span class="opt"><i class="box"></i>${x}</span>`).join('')}</div>
       <div class="foot">
         <div class="sig"><i></i><span>Firma per l’associazione</span></div>
         ${assoc.nota ? `<div class="nota">${esc(assoc.nota)}</div>` : ''}
@@ -79,6 +80,11 @@
   .quota { margin-top: 3.4mm; display: flex; justify-content: space-between; align-items: baseline; padding: 2.2mm 2.6mm; border: .35mm solid #1d1717; font-size: 8.6pt; }
   .quota b { font-size: 11pt; min-width: 32mm; text-align: right; }
   .line { display: inline-block; width: 26mm; border-bottom: .3mm solid #1d1717; height: 4mm; vertical-align: bottom; }
+  .pay { display: flex; align-items: center; gap: 4mm; margin-top: 2.6mm; font-size: 8.4pt; }
+  .pay .l2 { color: #666; font-size: 7.4pt; text-transform: uppercase; letter-spacing: .03em; margin-right: auto; }
+  .pay b { font-size: 10pt; }
+  .pay .opt { display: inline-flex; align-items: center; gap: 1.4mm; }
+  .box { display: inline-block; width: 3.4mm; height: 3.4mm; border: .3mm solid #1d1717; }
   .foot { margin-top: auto; display: flex; flex-direction: column; gap: 2mm; }
   .sig { align-self: flex-end; width: 46mm; text-align: center; }
   .sig i { display: block; height: 9mm; border-bottom: .25mm solid #1d1717; }

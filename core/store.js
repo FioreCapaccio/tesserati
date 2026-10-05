@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   soonDays: 30,
   warnDays: 90,
   csvPath: '',
+  defaultPayment: '', // '' = da indicare a mano sulla ricevuta
   theme: 'system', // 'system' | 'light' | 'dark'
 };
 
@@ -28,6 +29,8 @@ function normalizeState(s) {
   return out;
 }
 
+const PAYMENT_METHODS = ['Contanti', 'POS', 'Bonifico'];
+const validPayment = (v) => v === '' || PAYMENT_METHODS.includes(v);
 const mKey = (id, iscrizioneIso) => `${id}_${iscrizioneIso}`;
 const PERSON_FIELDS = ['nome', 'cognome', 'nascita', 'provNascita', 'cf', 'email', 'cell', 'indirizzo', 'citta'];
 const MEMBERSHIP_FIELDS = ['iscrizione', 'iscrizioneOra', 'scadenza', 'stato'];
@@ -59,7 +62,7 @@ function importRecords(state, records, { file = '', warnings = [], now = new Dat
       state.memberships[key] = {
         key, personId: r.id,
         iscrizione: r.iscrizione, iscrizioneOra: r.iscrizioneOra, scadenza: r.scadenza, stato: r.stato,
-        printed: firstImport, printedAt: null, receiptNo: null, receiptLabel: '', quota: '',
+        printed: firstImport, printedAt: null, receiptNo: null, receiptLabel: '', quota: '', paymentMethod: '',
         hidden: false, addedAt: stamp,
       };
       if (!firstImport) { report.nuovi++; report.nuoviKeys.push(key); }
@@ -95,7 +98,8 @@ function importRecords(state, records, { file = '', warnings = [], now = new Dat
 }
 
 function updateMemberships(state, keys, patch) {
-  const allowed = ['printed', 'quota', 'hidden'];
+  const allowed = ['printed', 'quota', 'hidden', 'paymentMethod'];
+  if ('paymentMethod' in patch && !validPayment(patch.paymentMethod)) throw new Error('Metodo di pagamento non valido.');
   for (const k of keys) {
     const m = state.memberships[k];
     if (!m) continue;
@@ -120,6 +124,7 @@ function commitPrint(state, receipts, nextReceipt, now = new Date()) {
     m.receiptNo = r.no;
     m.receiptLabel = r.label;
     m.quota = r.quota || '';
+    m.paymentMethod = validPayment(r.method) ? (r.method || '') : '';
     m.receiptDate = r.date || '';
   }
   if (Number.isFinite(nextReceipt)) state.settings.nextReceipt = nextReceipt;
@@ -132,7 +137,8 @@ function saveSettings(state, settings) {
   s.soonDays = Math.max(1, parseInt(s.soonDays, 10) || 30);
   s.warnDays = Math.max(s.soonDays + 1, parseInt(s.warnDays, 10) || 90);
   if (!['system', 'light', 'dark'].includes(s.theme)) s.theme = 'system';
+  if (!validPayment(s.defaultPayment)) s.defaultPayment = '';
   state.settings = s;
 }
 
-module.exports = { DEFAULT_SETTINGS, emptyState, normalizeState, importRecords, updateMemberships, updatePerson, commitPrint, saveSettings, mKey };
+module.exports = { PAYMENT_METHODS, DEFAULT_SETTINGS, emptyState, normalizeState, importRecords, updateMemberships, updatePerson, commitPrint, saveSettings, mKey };

@@ -277,6 +277,7 @@ function renderDrawer() {
         <dt>Stato</dt><dd>${esc(m.stato)}</dd>
         <dt>Ricevuta</dt><dd>${m.printed ? `Stampata${m.printedAt ? ' il ' + new Date(m.printedAt).toLocaleDateString('it-IT') : ' (già prima del primo caricamento)'}${m.receiptNo ? ` · n° ${esc(m.receiptLabel || m.receiptNo)}` : ''}` : 'Da stampare'}</dd>
         <dt>Quota (€)</dt><dd><div class="inline-field"><input class="field" id="quota" value="${esc(m.quota)}" placeholder="vuoto = a mano" inputmode="decimal"><button class="btn sm" data-act="save-quota">Salva</button></div></dd>
+        <dt>Pagamento</dt><dd><select class="field" id="pay" aria-label="Metodo di pagamento">${payOptions(m.paymentMethod, 'Non indicato')}</select></dd>
       </dl></div>
       <div class="d-sec"><h3>Storico tessere (${hist.length})</h3><div class="hist">
         ${hist.map((h) => `<button data-open="${esc(h.key)}" class="${h.key === m.key ? 'on' : ''}"><span class="dot ${statusOf(h)}"></span><span class="when">${fmt(h.iscrizione)} → ${fmt(h.scadenza)}</span>${h.printed ? '<span class="badge neutral">✓</span>' : '<span class="badge todo">Da stampare</span>'}</button>`).join('')}
@@ -398,6 +399,7 @@ function settingsView() {
           ${inp('s-prefix', 'Prefisso (es. 2026/)', s.receiptPrefix)}
           ${inp('s-digits', 'Cifre del numero (zeri iniziali)', s.receiptDigits, 'type="number" min="1" max="10"')}
           ${inp('s-quota', 'Quota predefinita € (vuoto = da scrivere a mano)', s.defaultQuota, 'inputmode="decimal"')}
+          <label>Metodo di pagamento predefinito<select class="field" id="s-pay">${payOptions(s.defaultPayment, 'Da segnare a mano sulla ricevuta')}</select></label>
         </div>
         <p class="path" style="margin:10px 0 0">Anteprima numero: <b id="numprev">${esc(s.receiptPrefix + String(s.nextReceipt).padStart(s.receiptDigits, '0'))}</b></p></section>
       <section class="card"><h2>Calendario</h2><p>Soglie dei colori rispetto alla data di oggi: rosso se scaduta, arancione e giallo in base ai giorni mancanti, verde oltre.</p>
@@ -434,7 +436,7 @@ function readSettingsForm() {
   const cur = S();
   return Object.assign({}, cur, {
     assoc: Object.assign({}, cur.assoc, { nome: v('s-nome'), indirizzo: v('s-indirizzo'), cf: v('s-cf'), telefono: v('s-telefono'), email: v('s-email'), nota: v('s-nota') }),
-    nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'),
+    nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'), defaultPayment: v('s-pay'),
     soonDays: v('s-soon'), warnDays: v('s-warn'),
   });
 }
@@ -465,6 +467,9 @@ function showImportReport(res) {
     <footer>${todo ? '<button class="btn primary" data-act="goto-todo">Vedi quelli da stampare</button>' : ''}<button class="btn" data-act="close-modal">Chiudi</button></footer></div>`);
 }
 
+const PAY = ['Contanti', 'POS', 'Bonifico'];
+const payOptions = (val, blank) => [['', blank], ...PAY.map((x) => [x, x])].map(([v, l]) => `<option value="${v}" ${v === (val || '') ? 'selected' : ''}>${l}</option>`).join('');
+
 function openPrintDialog(keys) {
   const { rows } = derive();
   const map = new Map(rows.map((r) => [r.m.key, r]));
@@ -473,6 +478,9 @@ function openPrintDialog(keys) {
   const s = S();
   const existing = items.filter((r) => r.m.receiptNo).length;
   const pages = Math.ceil(items.length / 4);
+  // Valori per singola ricevuta: partono da quelli salvati sulla tessera, altrimenti dai predefiniti.
+  const row = {};
+  items.forEach((r) => { row[r.m.key] = { quota: r.m.quota || s.defaultQuota, method: r.m.paymentMethod || s.defaultPayment, qT: !!r.m.quota, mT: !!r.m.paymentMethod }; });
   openModal(`<div class="modal big" role="dialog" aria-modal="true" aria-labelledby="mt">
     <header><h2 id="mt">Stampa ricevute</h2></header>
     <div class="mbody"><div class="print-grid">
@@ -480,10 +488,17 @@ function openPrintDialog(keys) {
         <div><b>${items.length}</b> ricevut${items.length === 1 ? 'a' : 'e'} · <b>${pages}</b> foglio${pages === 1 ? '' : 'i'} A4 (4 per foglio)</div>
         <label>Data della ricevuta<input class="field" type="date" id="p-date" value="${todayIso()}"></label>
         <label>Primo numero progressivo<input class="field" type="number" min="1" id="p-start" value="${s.nextReceipt}"></label>
-        <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(s.defaultQuota)}" inputmode="decimal" placeholder="vuoto = da scrivere a mano"></label>
-        <div class="hint">${existing ? `${existing} ${existing === 1 ? 'ricevuta ha' : 'ricevute hanno'} già un numero e lo mantiene${existing === items.length ? '' : '; le altre proseguono dal numero indicato'}. ` : ''}La quota salvata sulla singola tessera ha la precedenza. Se la quota è vuota, resta uno spazio da compilare a mano.</div>
+        <div class="two">
+          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(s.defaultQuota)}" inputmode="decimal" placeholder="a mano"></label>
+          <label>Pagamento predefinito<select class="field" id="p-method">${payOptions(s.defaultPayment, 'Da segnare a mano')}</select></label>
+        </div>
+        <div class="hint">${existing ? `${existing} ${existing === 1 ? 'ricevuta ha' : 'ricevute hanno'} già un numero e lo mantiene${existing === items.length ? '' : '; le altre proseguono dal numero indicato'}. ` : ''}Se quota o pagamento restano vuoti, sulla ricevuta c’è lo spazio da compilare a mano.</div>
         <div class="hint" id="p-range"></div>
         ${s.assoc.nome ? '' : '<div class="hint" style="color:var(--org-tx);background:var(--org-bg);padding:8px 10px;border-radius:8px">Mancano i dati dell’associazione: inseriscili in Impostazioni per averli sulla ricevuta.</div>'}
+        <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento</span></div>
+        <div class="rowlist" id="p-rows">${items.map((r) => `<div class="prow"><span class="pn" title="${esc(r.p.cognome + ' ' + r.p.nome)}">${esc(r.p.cognome)} ${esc(r.p.nome)}</span>
+          <input class="field" data-rq="${esc(r.m.key)}" value="${esc(row[r.m.key].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(r.p.cognome)}">
+          <select class="field" data-rm="${esc(r.m.key)}" aria-label="Pagamento ${esc(r.p.cognome)}">${payOptions(row[r.m.key].method, '—')}</select></div>`).join('')}</div>
       </div>
       <div class="preview" id="pv"></div>
     </div></div>
@@ -494,7 +509,6 @@ function openPrintDialog(keys) {
     const build = () => {
       const date = $('#p-date').value || todayIso();
       let n = Math.max(1, parseInt($('#p-start').value, 10) || 1);
-      const defQuota = $('#p-quota').value.trim();
       const out = [];
       const receipts = [];
       let lastNew = null;
@@ -502,9 +516,9 @@ function openPrintDialog(keys) {
         let no = r.m.receiptNo;
         let label = r.m.receiptLabel;
         if (!no) { no = n++; label = s.receiptPrefix + String(no).padStart(s.receiptDigits, '0'); lastNew = no; }
-        const quota = r.m.quota || defQuota;
-        out.push({ p: r.p, m: r.m, label: label || String(no), quota, date });
-        receipts.push({ key: r.m.key, no, label: label || String(no), quota, date });
+        const { quota, method } = row[r.m.key];
+        out.push({ p: r.p, m: r.m, label: label || String(no), quota: quota.trim(), method, date });
+        receipts.push({ key: r.m.key, no, label: label || String(no), quota: quota.trim(), method, date });
       }
       const nums = receipts.map((x) => x.no);
       $('#p-range').textContent = `Numeri: dal ${s.receiptPrefix}${String(Math.min(...nums)).padStart(s.receiptDigits, '0')} al ${s.receiptPrefix}${String(Math.max(...nums)).padStart(s.receiptDigits, '0')}.`;
@@ -517,7 +531,19 @@ function openPrintDialog(keys) {
       $('iframe', pv).srcdoc = Receipt.build(out, s.assoc, { preview: true });
     };
     let t;
-    for (const id of ['p-date', 'p-start', 'p-quota']) $('#' + id).addEventListener('input', () => { clearTimeout(t); t = setTimeout(build, 200); });
+    const later = () => { clearTimeout(t); t = setTimeout(build, 200); };
+    for (const id of ['p-date', 'p-start']) $('#' + id).addEventListener('input', later);
+    // I predefiniti si propagano alle righe non modificate a mano.
+    $('#p-quota').addEventListener('input', (e) => {
+      document.querySelectorAll('[data-rq]').forEach((i) => { const st = row[i.dataset.rq]; if (!st.qT) { st.quota = e.target.value; i.value = e.target.value; } });
+      later();
+    });
+    $('#p-method').addEventListener('change', (e) => {
+      document.querySelectorAll('[data-rm]').forEach((i) => { const st = row[i.dataset.rm]; if (!st.mT) { st.method = e.target.value; i.value = e.target.value; } });
+      later();
+    });
+    $('#p-rows').addEventListener('input', (e) => { const k = e.target.dataset.rq; if (k) { row[k].quota = e.target.value; row[k].qT = true; later(); } });
+    $('#p-rows').addEventListener('change', (e) => { const k = e.target.dataset.rm; if (k) { row[k].method = e.target.value; row[k].mT = true; later(); } });
     build();
   });
 }
@@ -719,6 +745,7 @@ document.addEventListener('change', (e) => {
     App.filters[t.dataset.filter] = t.type === 'checkbox' ? t.checked : t.value;
     renderTable();
   } else if (t.hasAttribute('data-cal-hidden')) { App.cal.showHidden = t.checked; render(); }
+  else if (t.id === 'pay' && App.detailKey) patch([App.detailKey], { paymentMethod: t.value }, 'Metodo di pagamento salvato.');
 });
 document.addEventListener('input', (e) => {
   const t = e.target;

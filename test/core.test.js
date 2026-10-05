@@ -71,6 +71,38 @@ if (fs.existsSync(csvPath)) {
 } else console.log('CSV reale non trovato, test saltati:', csvPath);
 console.log(`\n${n} test superati`);
 
+// ---- Metodo di pagamento ----
+{
+  const st = S.emptyState();
+  S.importRecords(st, [{ id: '7', nome: 'Pia', cognome: 'Neri', nascita: '1980-01-01', provNascita: '', cf: 'Y', email: '', cell: '', indirizzo: '', citta: '', iscrizione: '2026-02-01', iscrizioneOra: '', scadenza: '2027-01-31', stato: 'Attivo' }], {});
+  const k = Object.keys(st.memberships)[0];
+  t('pagamento: metodi ammessi salvati sulla tessera', () => {
+    for (const v of ['Contanti', 'POS', 'Bonifico', '']) { S.updateMemberships(st, [k], { paymentMethod: v }); assert.strictEqual(st.memberships[k].paymentMethod, v); }
+  });
+  t('pagamento: metodo inventato rifiutato', () => {
+    S.updateMemberships(st, [k], { paymentMethod: 'POS' });
+    assert.throws(() => S.updateMemberships(st, [k], { paymentMethod: 'Assegno' }), /non valido/);
+    assert.strictEqual(st.memberships[k].paymentMethod, 'POS');
+  });
+  t('pagamento: la stampa registra il metodo usato', () => {
+    S.commitPrint(st, [{ key: k, no: 1, label: '1', quota: '20', method: 'Bonifico', date: '2026-10-05' }], 2);
+    assert.strictEqual(st.memberships[k].paymentMethod, 'Bonifico');
+    S.commitPrint(st, [{ key: k, no: 1, label: '1', quota: '20', method: 'xyz' }], 2);
+    assert.strictEqual(st.memberships[k].paymentMethod, '');
+  });
+  t('pagamento: predefinito nelle impostazioni validato', () => {
+    S.saveSettings(st, { ...st.settings, defaultPayment: 'POS' }); assert.strictEqual(st.settings.defaultPayment, 'POS');
+    S.saveSettings(st, { ...st.settings, defaultPayment: 'Barattolo' }); assert.strictEqual(st.settings.defaultPayment, '');
+  });
+  t('pagamento: backup con metodo non valido è rifiutato', () => {
+    const B = require('../core/backup');
+    const bk = B.makeBackup(st, '1.0.0');
+    assert.ok(B.verifyBackup(JSON.parse(JSON.stringify(bk))).ok);
+    const bad = JSON.parse(JSON.stringify(bk)); bad.data.memberships[k].paymentMethod = 'Assegno'; bad.sha256 = B.sha256(JSON.stringify(bad.data));
+    assert.ok(!B.verifyBackup(bad).ok);
+  });
+}
+
 // ---- Ricerca del CSV nella cartella Download ----
 {
   const os = require('os');

@@ -207,8 +207,15 @@ textarea.field { width: 100%; min-height: 70px; resize: vertical; }
 .stat.hl { background: var(--accent); color: var(--accent-ink); }
 .stat.hl span { color: inherit; opacity: .85; }
 ul.warns { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
-.print-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; height: 100%; }
-.print-grid .ctl { display: flex; flex-direction: column; gap: 14px; }
+.print-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; height: 100%; min-height: 0; }
+.print-grid .ctl { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; padding-right: 6px; }
+.print-grid .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rowlist-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+.rowlist-head b { color: var(--ink); }
+.rowlist { display: flex; flex-direction: column; gap: 6px; }
+.prow { display: grid; grid-template-columns: minmax(0, 1fr) 68px 104px; gap: 6px; align-items: center; }
+.prow .pn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ink); }
+.prow .field { padding: 5px 7px; font-size: 13px; }
 .print-grid .ctl label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
 .print-grid .ctl .field { color: var(--ink); font-size: 14px; }
 .print-grid .hint { font-size: 12.5px; color: var(--muted); }
@@ -226,3 +233,6 @@ ul.warns { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 
 .view { flex: 1 0 auto; }
 .app-foot { flex: none; margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; text-align: center; }
 .side-bottom .meta.ver { opacity: .6; text-align: center; }
+.print-grid .ctl { overflow-x: hidden; }
+.print-grid .two > label { min-width: 0; }
+.print-grid .two .field { width: 100%; min-width: 0; }
