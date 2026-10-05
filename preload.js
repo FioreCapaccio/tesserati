@@ -9,6 +9,7 @@ const call = async (channel, payload) => {
 
 contextBridge.exposeInMainWorld('api', {
   getState: () => call('state:get'),
+  setTheme: (t) => call('theme:set', t),
   saveSettings: (s) => call('settings:save', s),
   importCsv: (opts) => call('import:run', opts || {}),
   updateMemberships: (keys, patch) => call('membership:update', { keys, patch }),

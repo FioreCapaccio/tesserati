@@ -32,7 +32,8 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; letter-spac
 #app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
 #side { background: var(--accent-2); color: #fbeeee; display: flex; flex-direction: column; padding: 20px 14px 16px; gap: 6px; }
 @media (prefers-color-scheme: dark) { #side { background: #2a1519; color: #f1e8e0; } }
-.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; font-family: var(--serif); font-size: 23px; }
+.brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 18px; font-family: Futura, "Century Gothic", "Avenir Next", "Trebuchet MS", var(--sans); font-weight: 700; font-size: 19px; letter-spacing: .14em; }
+.brand img { width: 40px; height: 40px; border-radius: 10px; flex: none; box-shadow: 0 0 0 1px rgba(255,255,255,.22); }
 .brand svg { width: 30px; height: 30px; flex: none; }
 .nav { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; width: 100%; opacity: .86; }
 .nav:hover { background: rgba(255,255,255,.1); opacity: 1; }

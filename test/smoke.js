@@ -31,7 +31,16 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await new Promise((r) => win.webContents.once('did-finish-load', r));
       await wait(500);
 
+      await js(`window.api.setTheme('light').then(r=>{setData(r);render()})`);
       await shot('01-elenco');
+      await js(`document.querySelector('[data-nav=impostazioni]').click()`);
+      await js(`document.querySelector('[data-act=set-theme][data-v=dark]').click()`);
+      await wait(500);
+      log('tema salvato =', st.settings.theme, '| selettore premuto =', await js(`document.querySelector('[data-act=set-theme][aria-pressed=true]').textContent`));
+      await shot('10-impostazioni-scuro');
+      await js(`document.querySelector('[data-nav=lista]').click()`);
+      await shot('11-elenco-scuro');
+      await js(`window.api.setTheme('light').then(r=>{setData(r);render()})`);
       await js(`document.querySelector('tr[data-key]').click()`);
       await shot('02-scheda');
       await js(`document.querySelector('[data-nav=stampare]').click()`);
