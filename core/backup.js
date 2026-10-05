@@ -34,6 +34,7 @@ function checkStructure(data) {
     if (!validIso(m.iscrizione) || !validIso(m.scadenza)) add(`Tessera ${key}: date non valide.`);
     else if (m.scadenza < m.iscrizione) add(`Tessera ${key}: scadenza precedente all'iscrizione.`);
     if (typeof m.printed !== 'boolean') add(`Tessera ${key}: stato di stampa non valido.`);
+    if (m.paymentMethod != null && !['', 'Contanti', 'POS', 'Bonifico'].includes(m.paymentMethod)) add(`Tessera ${key}: metodo di pagamento non valido.`);
     if (m.printed && m.receiptNo != null && !Number.isInteger(m.receiptNo)) add(`Tessera ${key}: numero ricevuta non valido.`);
   }
   const s = data.settings;

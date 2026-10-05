@@ -47,10 +47,16 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await shot('03-da-stampare');
       await js(`document.querySelector('[data-act=print-all-todo]').click()`);
       await wait(900);
+      await js(`(()=>{const rs=[...document.querySelectorAll('[data-rm]')];rs[0].value='Contanti';rs[0].dispatchEvent(new Event('change',{bubbles:true}));rs[1].value='POS';rs[1].dispatchEvent(new Event('change',{bubbles:true}));const q=document.querySelectorAll('[data-rq]')[0];q.value='25';q.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await wait(700);
+      log('colonna opzioni: larghezza contenuto', await js(`(()=>{const c=document.querySelector('.ctl');return c.scrollWidth+' / visibile '+c.clientWidth})()`));
+      const pay = await js(`openPrintDialog.current.receipts.map(r=>r.method+'|'+r.quota)`);
+      log('metodi per ricevuta =', JSON.stringify(pay));
       await shot('04-dialogo-stampa');
       const html = await js(`openPrintDialog.current.html`);
       const nextNo = await js(`openPrintDialog.current.nextReceipt`);
       log('nextReceipt dopo stampa =', nextNo);
+      log('html: Contanti in grassetto =', html.includes('<b>Contanti</b>'), '| POS =', html.includes('<b>POS</b>'), '| caselle da spuntare a mano =', (html.match(/class="box"/g) || []).length);
       fs.writeFileSync(path.join(out, 'ricevute.html'), html);
       const pw = new BrowserWindow({ show: false, width: 794, height: 1123, useContentSize: true });
       await pw.loadFile(path.join(out, 'ricevute.html'));
