@@ -3,17 +3,20 @@
   "productName": "Tesserati",
   "version": "1.0.0",
   "description": "Gestione tesserati, ricevute e scadenze per associazione culturale teatrale",
+  "author": "Fioravante Capaccio",
+  "license": "UNLICENSED",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "node test/core.test.js",
-    "dist:mac": "electron-builder --mac dmg zip --arm64",
-    "dist:win": "electron-builder --win nsis zip --x64",
-    "dist": "electron-builder --mac dmg zip --arm64 --win nsis zip --x64"
+    "dist:mac": "electron-builder --mac --arm64",
+    "dist:win": "electron-builder --win --x64",
+    "dist": "npm run dist:mac && npm run dist:win"
   },
   "build": {
     "appId": "it.associazione.tesserati",
     "productName": "Tesserati",
+    "copyright": "Copyright © 2026 Fioravante Capaccio",
     "files": [
       "main.js",
       "preload.js",

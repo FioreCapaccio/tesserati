@@ -45,7 +45,10 @@ const App = {
   busy: false,
 };
 
-function setData(snap) { App.data = snap.state; App.dataFile = snap.dataFile || App.dataFile; }
+function setData(snap) {
+  App.data = snap.state;
+  for (const k of ['dataFile', 'version', 'copyright', 'csv', 'defaultDataFile']) if (snap[k] !== undefined) App[k] = snap[k];
+}
 const S = () => App.data.settings;
 
 function statusOf(m) {
@@ -97,6 +100,7 @@ function renderSide() {
     <div class="side-bottom">
       <div class="meta">${last ? `Ultimo caricamento<br><b>${new Date(last.at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</b>${last.nuovi && !last.firstImport ? ` · ${last.nuovi} nuovi` : ''}` : 'Nessun file ancora caricato'}</div>
       <button class="btn-reload" data-act="reload" ${App.busy ? 'disabled' : ''}>${ICON.sync}<span>${App.busy ? 'Lettura…' : 'Rileggi file'}</span></button>
+      <div class="meta ver">v${esc(App.version || '')}</div>
     </div>`;
 }
 
@@ -104,10 +108,12 @@ function render() {
   renderSide();
   const main = $('#main');
   const scroll = main.scrollTop;
-  if (!Object.keys(App.data.memberships).length && App.view !== 'impostazioni') main.innerHTML = welcome();
-  else if (App.view === 'lista' || App.view === 'stampare') main.innerHTML = listView();
-  else if (App.view === 'calendario') main.innerHTML = calendarView();
-  else main.innerHTML = settingsView();
+  let body;
+  if (!Object.keys(App.data.memberships).length && App.view !== 'impostazioni') body = welcome();
+  else if (App.view === 'lista' || App.view === 'stampare') body = listView();
+  else if (App.view === 'calendario') body = calendarView();
+  else body = settingsView();
+  main.innerHTML = `<div class="view">${body}</div><footer class="app-foot">Tesserati · versione ${esc(App.version || '')} · ${esc(App.copyright || '')}</footer>`;
   main.scrollTop = scroll;
   if (App.view === 'lista' || App.view === 'stampare') renderTable();
   renderDrawer();
@@ -116,7 +122,9 @@ function render() {
 function welcome() {
   return `<div class="empty"><h2>Benvenuto in Tesserati</h2>
     <p>Per iniziare carica il file CSV esportato da Younity.<br>Le tessere presenti ora verranno segnate come già stampate: da quel momento, a ogni lettura, risulteranno “da stampare” solo i nuovi tesserati.</p>
-    <button class="btn primary" data-act="pick-import">${ICON.sync} Scegli il file CSV</button></div>`;
+    <p>Il file viene cercato nella cartella <b>Download</b> (<span class="path">${esc(App.csv ? App.csv.folder : '')}</span>).</p>
+    <button class="btn primary" data-act="reload">${ICON.sync} Leggi il file</button>
+    <button class="btn" data-act="pick-import">Scegli un altro file…</button></div>`;
 }
 
 // ======================= Elenco =======================
@@ -355,6 +363,14 @@ function yearGrid(rows) {
 }
 
 // ======================= Impostazioni =======================
+function csvBlock() {
+  const c = App.csv;
+  if (!c) return '';
+  const where = c.auto ? 'Download (automatico)' : c.kind === 'file' ? 'File scelto' : 'Cartella scelta';
+  return `<div style="margin-bottom:6px"><b>${where}</b>${c.missing ? ' <span class="badge expired">Percorso salvato non trovato: uso Download</span>' : ''}</div>
+    <div class="path" style="margin-bottom:8px">${esc(c.target)}</div>
+    <div>${c.file ? `Verrà letto: <b>${esc(c.file.split(/[\\/]/).pop())}</b> <span style="color:var(--muted)">(${esc(c.kind === 'folder' ? 'il più recente della cartella' : 'file indicato')})</span>` : '<span class="badge soon">Nessun file Younity…csv trovato qui: al “Rileggi file” ti verrà chiesto di sceglierlo</span>'}</div>`;
+}
 function settingsView() {
   const s = S(), a = s.assoc;
   const inp = (id, label, val, extra = '', wide = false) => `<label class="${wide ? 'wide' : ''}">${label}<input class="field" id="${id}" value="${esc(val)}" ${extra}></label>`;
@@ -385,13 +401,27 @@ function settingsView() {
           ${inp('s-soon', 'Arancione: scade entro (giorni)', s.soonDays, 'type="number" min="1"')}
           ${inp('s-warn', 'Giallo: scade entro (giorni)', s.warnDays, 'type="number" min="2"')}
         </div></section>
-      <section class="card"><h2>File e dati</h2><p>I dati restano solo su questo computer.</p>
-        <div style="margin-bottom:10px">File CSV collegato:<div class="path">${esc(s.csvPath) || 'nessuno'}</div></div>
-        <div style="margin-bottom:14px">Archivio dati:<div class="path">${esc(App.dataFile)}</div></div>
-        <div class="d-actions"><button class="btn" data-act="pick-import">Cambia file CSV e leggilo…</button>
-          <button class="btn" data-act="export-backup">Salva copia dei dati…</button>
-          <button class="btn" data-act="import-backup">Ripristina copia…</button></div></section>
-      <div class="savebar"><button class="btn primary" data-act="save-settings">Salva impostazioni</button><span id="saved" style="color:var(--muted)"></span></div>
+      <div class="savebar"><button class="btn primary" data-act="save-settings">Salva impostazioni</button><span id="saved" style="color:var(--muted)">Salva Associazione, Ricevute e Calendario. Le sezioni qui sotto agiscono subito.</span></div>
+      <section class="card"><h2>File CSV da leggere</h2>
+        <p>Di norma il file esportato da Younity si trova nella cartella <b>Download</b>: l'app cerca lì il file <i>Younity…csv</i> più recente. Puoi indicare un'altra cartella oppure un file preciso.</p>
+        ${csvBlock()}
+        <div class="d-actions" style="margin-top:12px">
+          <button class="btn" data-act="set-csv" data-kind="folder">Scegli cartella…</button>
+          <button class="btn" data-act="set-csv" data-kind="file">Scegli file…</button>
+          <button class="btn" data-act="set-csv" data-kind="auto" ${App.csv && App.csv.auto && !App.csv.missing ? 'disabled' : ''}>Torna a Download</button></div></section>
+      <section class="card"><h2>Archivio dati</h2>
+        <p>È il file dove l'app conserva tessere, flag di stampa e numerazione. Puoi tenerlo in un'altra cartella (per esempio su un disco esterno o in una cartella sincronizzata).</p>
+        <div class="path" style="margin-bottom:6px">${esc(App.dataFile)}</div>
+        <div style="color:var(--muted);font-size:13px;margin-bottom:12px">${App.dataFile === App.defaultDataFile ? 'Posizione predefinita.' : 'Posizione personalizzata.'} Spostando l'archivio, la copia nella vecchia posizione non viene cancellata.</div>
+        <div class="d-actions"><button class="btn" data-act="change-archive">Cambia cartella…</button>
+          <button class="btn" data-act="change-archive" data-reset="1" ${App.dataFile === App.defaultDataFile ? 'disabled' : ''}>Posizione predefinita</button>
+          <button class="btn" data-act="show-data">Mostra nel file manager</button></div></section>
+      <section class="card"><h2>Backup e ripristino</h2>
+        <p>La copia contiene tutti i dati e le impostazioni (logo compreso) ed è protetta da una firma di integrità. Al ripristino l'app verifica firma e coerenza dei dati prima di toccare qualcosa, e salva a parte una copia dei dati attuali.</p>
+        <div class="d-actions"><button class="btn primary" data-act="export-backup">Backup: salva copia…</button>
+          <button class="btn" data-act="import-backup">Ripristina da copia…</button></div></section>
+      <section class="card"><h2>Informazioni</h2>
+        <dl class="kv"><dt>Programma</dt><dd>Tesserati</dd><dt>Versione</dt><dd>${esc(App.version || '')}</dd><dt>Copyright</dt><dd>${esc(App.copyright || '')}</dd></dl></section>
     </div>`;
 }
 
@@ -486,6 +516,27 @@ function openPrintDialog(keys) {
     for (const id of ['p-date', 'p-start', 'p-quota']) $('#' + id).addEventListener('input', () => { clearTimeout(t); t = setTimeout(build, 200); });
     build();
   });
+}
+
+function showRestoreDialog(r) {
+  const s = r.summary;
+  const when = s && s.createdAt ? new Date(s.createdAt).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short' }) : 'data non indicata';
+  const check = (ok, text) => `<li style="list-style:none;margin:4px 0">${ok ? '<span class="badge ok">✓</span>' : '<span class="badge expired">✕</span>'} ${text}</li>`;
+  const sigOk = r.signed && r.ok;
+  openModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt">
+    <header><h2 id="mt">${r.ok ? 'Ripristinare questa copia?' : 'Copia non utilizzabile'}</h2></header>
+    <div class="mbody">
+      <p style="margin:0;color:var(--muted)">${esc(r.name)}</p>
+      <ul style="padding:0;margin:12px 0">
+        ${r.signed ? check(r.ok || !r.errors.some((e) => e.startsWith('Firma')), 'Firma di integrità ' + (r.errors.some((e) => e.startsWith('Firma')) ? 'NON corrispondente' : 'verificata')) : check(false, 'File senza firma di integrità (formato semplice): è stato verificato solo il contenuto')}
+        ${check(!r.errors.some((e) => !e.startsWith('Firma')), r.errors.some((e) => !e.startsWith('Firma')) ? 'Coerenza dei dati: problemi trovati' : 'Coerenza dei dati verificata')}
+      </ul>
+      ${s ? `<div class="stats"><div class="stat"><b>${s.persons}</b><span>tesserati</span></div><div class="stat"><b>${s.memberships}</b><span>tessere</span></div><div class="stat"><b>${s.toPrint}</b><span>da stampare</span></div></div>
+        <p style="color:var(--muted);margin:0">Copia creata il ${esc(when)}${s.appVersion ? ' con la versione ' + esc(s.appVersion) : ''}.</p>` : ''}
+      ${r.errors.length ? `<ul class="warns">${r.errors.slice(0, 8).map((e) => `<li>${esc(e)}</li>`).join('')}${r.errors.length > 8 ? `<li>…e altri ${r.errors.length - 8} problemi</li>` : ''}</ul>` : ''}
+      ${r.ok ? `<p style="margin:14px 0 0"><b>Attenzione:</b> i dati attuali (${Object.keys(App.data.memberships).length} tessere) verranno sostituiti. Prima del ripristino ne viene salvata una copia accanto all’archivio.</p>` : '<p style="margin:14px 0 0">Il ripristino è stato bloccato per non danneggiare i dati attuali, che restano intatti.</p>'}
+    </div>
+    <footer><button class="btn" data-act="close-modal">${r.ok ? 'Annulla' : 'Chiudi'}</button>${r.ok ? `<button class="btn primary" data-act="do-restore" data-path="${esc(r.path)}">Ripristina</button>` : ''}</footer></div>`);
 }
 
 async function doPrint(mode) {
@@ -617,13 +668,31 @@ document.addEventListener('click', async (e) => {
       }
       case 'pick-logo': { const logo = await window.api.pickLogo(); if (logo) { const cur = readSettingsForm(); cur.assoc.logo = logo; setData(await window.api.saveSettings(cur)); render(); } break; }
       case 'remove-logo': { const cur = readSettingsForm(); cur.assoc.logo = ''; setData(await window.api.saveSettings(cur)); render(); break; }
-      case 'export-backup': { const r = await window.api.exportBackup(); if (!r.canceled) toast('Copia salvata.'); break; }
-      case 'import-backup': {
-        if (!confirm('Il ripristino sostituisce tutti i dati attuali con quelli della copia. Continuare?')) break;
-        const r = await window.api.importBackup();
-        if (!r.canceled) { setData(r); render(); toast('Dati ripristinati.'); }
+      case 'export-backup': {
+        const r = await window.api.exportBackup();
+        if (!r.canceled) toast(`Copia salvata e verificata: ${r.summary.persons} tesserati, ${r.summary.memberships} tessere.`);
         break;
       }
+      case 'import-backup': {
+        const r = await window.api.inspectBackup();
+        if (!r.canceled) showRestoreDialog(r);
+        break;
+      }
+      case 'do-restore': {
+        const res = await window.api.applyBackup(act.dataset.path);
+        setData(res); App.sel.clear(); App.detailKey = null; closeModal(); render();
+        toast('Dati ripristinati. Copia dei dati precedenti salvata accanto all’archivio.');
+        break;
+      }
+      case 'set-csv': { const r = await window.api.setCsv(act.dataset.kind); if (!r.canceled) { setData(r); render(); toast('Origine del file CSV aggiornata.'); } break; }
+      case 'change-archive': {
+        const r = await window.api.changeArchive(!!act.dataset.reset);
+        if (r.canceled || r.unchanged) break;
+        setData(r); App.sel.clear(); App.detailKey = null; render();
+        toast(r.useExisting ? 'Ora usi l’archivio presente nella nuova cartella.' : 'Archivio spostato nella nuova cartella.');
+        break;
+      }
+      case 'show-data': await window.api.showDataFile(); break;
       default: break;
     }
   } catch (err) {
@@ -671,8 +740,10 @@ document.addEventListener('keydown', (e) => {
 
 // ======================= Avvio =======================
 (async function init() {
-  setData(await window.api.getState());
+  const snap = await window.api.getState();
+  setData(snap);
   render();
+  if (snap.warning) openModal(`<div class="modal"><header><h2>Attenzione</h2></header><div class="mbody"><p>${esc(snap.warning)}</p></div><footer><button class="btn primary" data-act="close-modal">Ho capito</button></footer></div>`);
   // Se si lascia la finestra aperta a cavallo di mezzanotte, ricalcola i colori.
   let day = todayIso();
   setInterval(() => { if (todayIso() !== day) { day = todayIso(); render(); } }, 60000);

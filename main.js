@@ -3,8 +3,11 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { readMembers } = require('./core/csv');
+const { readMembers, newestMatching } = require('./core/csv');
 const S = require('./core/store');
+const B = require('./core/backup');
+
+const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
 
 if (process.env.TESSERATI_USERDATA) app.setPath('userData', process.env.TESSERATI_USERDATA);
 
@@ -15,13 +18,36 @@ let state = S.emptyState();
 let dataFile;
 
 // ---------- Salvataggio ----------
+const DATA_NAME = 'tesserati-data.json';
+const locFile = () => path.join(app.getPath('userData'), 'location.json');
+let startupWarning = '';
+
+// La posizione dell'archivio è modificabile: la scelta è tenuta in un piccolo file fisso.
+function resolveDataFile() {
+  let dir = app.getPath('userData');
+  try {
+    const c = JSON.parse(fs.readFileSync(locFile(), 'utf8'));
+    if (c.dataDir) {
+      if (fs.existsSync(c.dataDir)) dir = c.dataDir;
+      else startupWarning = `La cartella dell'archivio (${c.dataDir}) non è raggiungibile: uso quella predefinita. Ricollega il disco e rimetti la posizione dalle Impostazioni.`;
+    }
+  } catch (_) { /* nessuna scelta salvata */ }
+  return path.join(dir, DATA_NAME);
+}
+
 function loadState() {
-  dataFile = path.join(app.getPath('userData'), 'tesserati-data.json');
+  dataFile = resolveDataFile();
   for (const f of [dataFile, dataFile + '.bak']) {
+    if (!fs.existsSync(f)) continue;
     try {
       state = S.normalizeState(JSON.parse(fs.readFileSync(f, 'utf8')));
+      if (f !== dataFile) startupWarning = (startupWarning + ' L\'archivio principale non era leggibile: ripristinata l\'ultima copia automatica.').trim();
       return;
     } catch (_) { /* prova il prossimo */ }
+  }
+  if (fs.existsSync(dataFile)) {
+    const bad = `${dataFile}.danneggiato-${Date.now()}`;
+    try { fs.renameSync(dataFile, bad); startupWarning = (startupWarning + ` L'archivio non era leggibile ed è stato messo da parte in ${bad}.`).trim(); } catch (_) {}
   }
   state = S.emptyState();
 }
@@ -34,7 +60,22 @@ function saveState() {
   fs.renameSync(tmp, dataFile);
 }
 
-const snapshot = () => ({ state, dataFile });
+// ---------- File CSV: predefinito = cartella Download ----------
+function resolveCsv() {
+  const raw = state.settings.csvPath || '';
+  const missing = !!raw && !fs.existsSync(raw);
+  const target = raw && !missing ? raw : app.getPath('downloads');
+  let isFile = false;
+  try { isFile = fs.statSync(target).isFile(); } catch (_) {}
+  return {
+    setting: raw, missing, auto: !raw || missing, target,
+    kind: isFile ? 'file' : 'folder',
+    folder: isFile ? path.dirname(target) : target,
+    file: isFile ? target : newestMatching(target),
+  };
+}
+
+const snapshot = () => ({ state, dataFile, version: app.getVersion(), copyright: COPYRIGHT, csv: resolveCsv(), defaultDataFile: path.join(app.getPath('userData'), DATA_NAME), warning: startupWarning });
 
 // ---------- Finestra ----------
 function createWindow() {
@@ -60,11 +101,13 @@ handle('state:get', () => snapshot());
 handle('settings:save', (settings) => { S.saveSettings(state, settings); saveState(); return snapshot(); });
 
 handle('import:run', async ({ pick } = {}) => {
-  let file = state.settings.csvPath;
-  if (pick || !file || !fs.existsSync(file)) {
+  const info = resolveCsv();
+  let file = pick ? null : info.file;
+  if (!file) {
     const r = await dialog.showOpenDialog(win, {
-      title: 'Scegli il file CSV dei tesserati',
-      defaultPath: file && fs.existsSync(path.dirname(file)) ? path.dirname(file) : app.getPath('documents'),
+      title: pick ? 'Scegli il file CSV da leggere' : 'File CSV non trovato: sceglilo',
+      message: `Cerco un file tipo "Younity.csv" in: ${info.folder}`,
+      defaultPath: info.folder,
       properties: ['openFile'],
       filters: [{ name: 'File CSV', extensions: ['csv', 'txt'] }, { name: 'Tutti i file', extensions: ['*'] }],
     });
@@ -72,10 +115,59 @@ handle('import:run', async ({ pick } = {}) => {
     file = r.filePaths[0];
   }
   const { records, warnings } = readMembers(fs.readFileSync(file));
-  state.settings.csvPath = file;
   const report = S.importRecords(state, records, { file: path.basename(file), warnings });
   saveState();
   return { report, ...snapshot() };
+});
+
+handle('csv:set', async ({ kind }) => {
+  const info = resolveCsv();
+  if (kind === 'auto') state.settings.csvPath = '';
+  else {
+    const r = await dialog.showOpenDialog(win, kind === 'folder'
+      ? { title: 'Cartella dove si trova il file CSV', defaultPath: info.folder, properties: ['openDirectory'] }
+      : { title: 'Scegli il file CSV', defaultPath: info.folder, properties: ['openFile'], filters: [{ name: 'File CSV', extensions: ['csv', 'txt'] }] });
+    if (r.canceled || !r.filePaths[0]) return { canceled: true };
+    state.settings.csvPath = r.filePaths[0];
+  }
+  saveState();
+  return snapshot();
+});
+
+handle('archive:change', async ({ reset }) => {
+  let dir;
+  if (reset) dir = app.getPath('userData');
+  else {
+    const r = await dialog.showOpenDialog(win, { title: 'Cartella dove tenere l\'archivio dei tesserati', defaultPath: path.dirname(dataFile), properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return { canceled: true };
+    dir = r.filePaths[0];
+  }
+  const target = path.join(dir, DATA_NAME);
+  if (path.resolve(target) === path.resolve(dataFile)) return { unchanged: true, ...snapshot() };
+  fs.mkdirSync(dir, { recursive: true });
+  fs.accessSync(dir, fs.constants.W_OK);
+  let useExisting = false;
+  if (fs.existsSync(target)) {
+    const ex = await dialog.showMessageBox(win, {
+      type: 'question', buttons: ['Usa l\'archivio presente', 'Sostituiscilo con quello attuale', 'Annulla'], defaultId: 2, cancelId: 2,
+      message: 'Nella cartella scelta esiste già un archivio.',
+      detail: 'Puoi usare quello che c\'è (i dati attuali restano nella vecchia posizione) oppure sostituirlo con i dati attuali (l\'archivio presente viene prima copiato di lato).',
+    });
+    if (ex.response === 2) return { canceled: true };
+    if (ex.response === 0) {
+      const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+      const errs = B.checkStructure(parsed);
+      if (errs.length) throw new Error('L\'archivio presente nella cartella non è valido: ' + errs[0]);
+      state = S.normalizeState(parsed);
+      useExisting = true;
+    } else fs.copyFileSync(target, `${target}.prima-della-sostituzione-${Date.now()}.bak`);
+  }
+  const oldFile = dataFile;
+  dataFile = target;
+  try { saveState(); } catch (e) { dataFile = oldFile; throw e; }
+  fs.writeFileSync(locFile(), JSON.stringify({ dataDir: reset ? '' : dir }));
+  startupWarning = '';
+  return { moved: true, useExisting, from: oldFile, ...snapshot() };
 });
 
 handle('membership:update', ({ keys, patch }) => { S.updateMemberships(state, keys, patch); saveState(); return snapshot(); });
@@ -94,20 +186,38 @@ handle('logo:pick', async () => {
 
 handle('backup:export', async () => {
   const stamp = new Date().toISOString().slice(0, 10);
-  const r = await dialog.showSaveDialog(win, { title: 'Salva copia dei dati', defaultPath: `tesserati-backup-${stamp}.json`, filters: [{ name: 'Backup', extensions: ['json'] }] });
+  const r = await dialog.showSaveDialog(win, { title: 'Salva copia di sicurezza', defaultPath: path.join(app.getPath('documents'), `tesserati-backup-${stamp}.json`), filters: [{ name: 'Copia di sicurezza', extensions: ['json'] }] });
   if (r.canceled || !r.filePath) return { canceled: true };
-  fs.writeFileSync(r.filePath, JSON.stringify(state, null, 1));
-  return { path: r.filePath };
+  fs.writeFileSync(r.filePath, JSON.stringify(B.makeBackup(state, app.getVersion())));
+  // Rilettura di controllo: la copia deve risultare integra prima di dirlo all'utente.
+  const check = B.verifyBackup(JSON.parse(fs.readFileSync(r.filePath, 'utf8')));
+  if (!check.ok) throw new Error('La copia è stata scritta ma non supera la verifica: ' + check.errors[0]);
+  return { path: r.filePath, summary: check.summary };
 });
 
-handle('backup:import', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Ripristina una copia dei dati', properties: ['openFile'], filters: [{ name: 'Backup', extensions: ['json'] }] });
+function readBackupFile(file) {
+  let obj;
+  try { obj = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (_) { return { ok: false, errors: ['Il file non è leggibile come copia di sicurezza (JSON non valido o troncato).'], signed: false, summary: null }; }
+  return B.verifyBackup(obj);
+}
+
+handle('backup:inspect', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Scegli la copia da ripristinare', properties: ['openFile'], filters: [{ name: 'Copia di sicurezza', extensions: ['json'] }] });
   if (r.canceled || !r.filePaths[0]) return { canceled: true };
-  const parsed = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
-  if (!parsed || typeof parsed !== 'object' || !parsed.memberships || !parsed.persons) throw new Error('Il file non è una copia dei dati valida.');
-  state = S.normalizeState(parsed);
+  const v = readBackupFile(r.filePaths[0]);
+  return { path: r.filePaths[0], name: path.basename(r.filePaths[0]), ok: v.ok, errors: v.errors, signed: v.signed, summary: v.summary };
+});
+
+handle('backup:apply', async ({ path: file }) => {
+  const v = readBackupFile(file); // si ricontrolla: il file potrebbe essere cambiato dopo l'anteprima
+  if (!v.ok) throw new Error('La copia non supera il controllo di integrità: ' + v.errors[0]);
+  // Copia di sicurezza automatica dei dati attuali, accanto all'archivio.
+  const safety = `${dataFile}.prima-del-ripristino.json`;
+  fs.writeFileSync(safety, JSON.stringify(B.makeBackup(state, app.getVersion())));
+  state = S.normalizeState(v.state);
   saveState();
-  return { ...snapshot() };
+  return { safety, ...snapshot() };
 });
 
 handle('shell:showData', () => { shell.showItemInFolder(dataFile); return true; });
@@ -148,6 +258,7 @@ handle('print:run', async ({ html, mode, receipts, nextReceipt }) => {
 
 // ---------- Avvio ----------
 app.whenReady().then(() => {
+  app.setAboutPanelOptions({ applicationName: 'Tesserati', applicationVersion: app.getVersion(), version: '', copyright: COPYRIGHT });
   loadState();
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
