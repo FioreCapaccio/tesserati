@@ -92,7 +92,7 @@ function renderSide() {
   const item = (v, icon, label, count) => `<button class="nav" data-nav="${v}" ${App.view === v ? 'aria-current="page"' : ''}>${ICON[icon]}<span>${label}</span>${count != null ? `<span class="count ${count ? '' : 'zero'}">${count}</span>` : ''}</button>`;
   const last = App.data.imports[App.data.imports.length - 1];
   $('#side').innerHTML = `
-    <div class="brand">${BRAND}<span>Tesserati</span></div>
+    <div class="brand"><img src="brand.png" alt="" width="40" height="40"><span>AROTRON</span></div>
     ${item('lista', 'users', 'Tesserati')}
     ${item('stampare', 'print', 'Da stampare', todo.length)}
     ${item('calendario', 'cal', 'Calendario')}
@@ -377,6 +377,10 @@ function settingsView() {
   return `
     <div class="page-head"><div><h1>Impostazioni</h1><p>Dati dell’associazione per le ricevute, numerazione e colori del calendario.</p></div></div>
     <div class="settings">
+      <section class="card"><h2>Aspetto</h2><p>Scegli la versione chiara o scura. “Automatico” segue le impostazioni del computer.</p>
+        <div class="seg" style="margin-left:0" role="group" aria-label="Tema">
+          ${[['system', 'Automatico'], ['light', 'Chiaro'], ['dark', 'Scuro']].map(([v, l]) => `<button data-act="set-theme" data-v="${v}" aria-pressed="${(s.theme || 'system') === v}">${l}</button>`).join('')}
+        </div></section>
       <section class="card"><h2>Associazione</h2><p>Compaiono nell’intestazione di ogni ricevuta.</p>
         <div class="form">
           ${inp('s-nome', 'Nome associazione', a.nome, '', true)}
@@ -692,6 +696,7 @@ document.addEventListener('click', async (e) => {
         toast(r.useExisting ? 'Ora usi l’archivio presente nella nuova cartella.' : 'Archivio spostato nella nuova cartella.');
         break;
       }
+      case 'set-theme': setData(await window.api.setTheme(act.dataset.v)); render(); break;
       case 'show-data': await window.api.showDataFile(); break;
       default: break;
     }

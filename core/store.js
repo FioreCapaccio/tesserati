@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   soonDays: 30,
   warnDays: 90,
   csvPath: '',
+  theme: 'system', // 'system' | 'light' | 'dark'
 };
 
 function emptyState() {
@@ -130,6 +131,7 @@ function saveSettings(state, settings) {
   s.receiptDigits = Math.min(10, Math.max(1, parseInt(s.receiptDigits, 10) || 4));
   s.soonDays = Math.max(1, parseInt(s.soonDays, 10) || 30);
   s.warnDays = Math.max(s.soonDays + 1, parseInt(s.warnDays, 10) || 90);
+  if (!['system', 'light', 'dark'].includes(s.theme)) s.theme = 'system';
   state.settings = s;
 }
 

@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -10,8 +10,6 @@ const B = require('./core/backup');
 const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
 
 if (process.env.TESSERATI_USERDATA) app.setPath('userData', process.env.TESSERATI_USERDATA);
-
-if (process.env.TESSERATI_THEME) require('electron').nativeTheme.themeSource = process.env.TESSERATI_THEME;
 
 let win;
 let state = S.emptyState();
@@ -81,7 +79,7 @@ const snapshot = () => ({ state, dataFile, version: app.getVersion(), copyright:
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1100, minHeight: 680,
-    title: 'Tesserati',
+    title: 'AROTRON · Tesserati',
     icon: path.join(__dirname, 'build', 'icon.png'),
     backgroundColor: '#f6f1e9',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
@@ -98,6 +96,16 @@ const handle = (name, fn) => ipcMain.handle(name, async (_e, ...args) => {
 });
 
 handle('state:get', () => snapshot());
+
+// Tema: 'system' segue il computer; 'light' e 'dark' lo forzano. Si applica subito.
+const applyTheme = () => { nativeTheme.themeSource = process.env.TESSERATI_THEME || state.settings.theme || 'system'; };
+handle('theme:set', (theme) => {
+  if (!['system', 'light', 'dark'].includes(theme)) throw new Error('Tema non valido.');
+  state.settings.theme = theme;
+  applyTheme();
+  saveState();
+  return snapshot();
+});
 
 handle('settings:save', (settings) => { S.saveSettings(state, settings); saveState(); return snapshot(); });
 
@@ -261,6 +269,7 @@ handle('print:run', async ({ html, mode, receipts, nextReceipt }) => {
 app.whenReady().then(() => {
   app.setAboutPanelOptions({ applicationName: 'Tesserati', applicationVersion: app.getVersion(), version: '', copyright: COPYRIGHT });
   loadState();
+  applyTheme();
   if (process.platform === 'darwin' && app.dock) { try { app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); } catch (_) {} }
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([
