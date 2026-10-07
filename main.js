@@ -1,11 +1,13 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, safeStorage } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { readMembers, newestMatching } = require('./core/csv');
 const S = require('./core/store');
 const B = require('./core/backup');
+const R = require('./core/reminders');
+const M = require('./core/mailer');
 
 const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
 
@@ -73,7 +75,21 @@ function resolveCsv() {
   };
 }
 
-const snapshot = () => ({ state, dataFile, version: app.getVersion(), copyright: COPYRIGHT, csv: resolveCsv(), defaultDataFile: path.join(app.getPath('userData'), DATA_NAME), warning: startupWarning });
+// ---------- Email di avviso: password cifrata con il portachiavi del sistema ----------
+// Resta fuori dall'archivio dati e dai backup: sul computer nuovo va reinserita.
+const secretFile = () => path.join(app.getPath('userData'), 'mail-secret.bin');
+const hasSecret = () => fs.existsSync(secretFile());
+function readSecret() {
+  if (!hasSecret()) return '';
+  try { return safeStorage.decryptString(fs.readFileSync(secretFile())); } catch (_) { return ''; }
+}
+const localIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// Solo per i test automatici: niente rete, i messaggi finiscono in un file.
+const fakeMailFile = process.env.TESSERATI_SMOKE ? process.env.TESSERATI_MAIL_FAKE : '';
+const fakeTransport = () => ({ sendMail: async (o) => { fs.appendFileSync(fakeMailFile, JSON.stringify(o) + '\n'); }, close() {} });
+
+const snapshot = () => ({ state, dataFile, version: app.getVersion(), copyright: COPYRIGHT, csv: resolveCsv(), defaultDataFile: path.join(app.getPath('userData'), DATA_NAME), warning: startupWarning,
+  mail: { hasSecret: hasSecret() || !!fakeMailFile, canEncrypt: safeStorage.isEncryptionAvailable(), dueCount: R.dueReminders(state, localIso()).groups.length } });
 
 // ---------- Finestra ----------
 function createWindow() {
@@ -105,6 +121,66 @@ handle('theme:set', (theme) => {
   applyTheme();
   saveState();
   return snapshot();
+});
+
+// ---------- Email di avviso ----------
+handle('mail:save-secret', (pw) => {
+  if (!pw) { try { fs.unlinkSync(secretFile()); } catch (_) {} return snapshot(); }
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Su questo computer non è disponibile la cifratura sicura delle password: non posso salvarla.');
+  fs.writeFileSync(secretFile(), safeStorage.encryptString(String(pw)));
+  return snapshot();
+});
+
+function mailReady() {
+  const mail = state.settings.mail;
+  if (!R.isEmail(mail.user)) throw new Error('Indirizzo email del mittente mancante o non valido (Impostazioni → Email di avviso).');
+  const password = fakeMailFile ? 'test' : readSecret();
+  if (!password) throw new Error('Password per app non impostata (Impostazioni → Email di avviso).');
+  return { mail, assoc: state.settings.assoc, password, transport: fakeMailFile ? fakeTransport() : undefined, delayMs: fakeMailFile ? 0 : 1000 };
+}
+
+handle('mail:due', () => {
+  const today = localIso();
+  const { groups, skipped } = R.dueReminders(state, today);
+  const log = (state.mailLog || []).slice(-100).reverse();
+  return { today, skipped, log, groups: groups.map((g) => Object.assign({}, g, R.renderMail(state.settings.mail, state.settings.assoc, g))) };
+});
+
+handle('mail:test', async () => {
+  const cfg = mailReady();
+  const sample = R.dueReminders(state, localIso()).groups[0] || { email: cfg.mail.user, items: [{ nome: 'Mario', cognome: 'Rossi', scadenza: localIso() }] };
+  const msg = R.renderMail(cfg.mail, cfg.assoc, Object.assign({}, sample, { email: cfg.mail.user }));
+  msg.subject = '[PROVA] ' + msg.subject;
+  const { results } = await M.sendMany(Object.assign({}, cfg, { messages: [msg] }));
+  if (!results[0].ok) throw new Error(results[0].error);
+  return { to: cfg.mail.user };
+});
+
+handle('mail:send', async ({ emails }) => {
+  const cfg = mailReady();
+  const wanted = new Set(emails || []);
+  const chosen = R.dueReminders(state, localIso()).groups.filter((g) => wanted.has(g.email)); // si ricalcola qui: non ci si fida della finestra
+  if (!chosen.length) throw new Error('Nessun avviso da inviare.');
+  const messages = chosen.map((g) => R.renderMail(cfg.mail, cfg.assoc, g));
+  const { results, stopped } = await M.sendMany(Object.assign({}, cfg, { messages, max: 100 }));
+  const at = new Date().toISOString();
+  const log = [];
+  results.forEach((r, i) => {
+    const g = chosen[i];
+    if (r.ok) S.markReminded(state, g.items.map((x) => x.key), { to: g.email, at });
+    if (!r.skipped) log.push({ at, to: g.email, names: g.items.map((x) => `${x.cognome} ${x.nome}`.trim()).join(', '), ok: r.ok, error: r.error || '' });
+  });
+  S.addMailLog(state, log);
+  saveState();
+  return { results, stopped, sent: results.filter((r) => r.ok).length, ...snapshot() };
+});
+
+handle('mail:mark-sent', ({ emails }) => {
+  const wanted = new Set(emails || []);
+  const chosen = R.dueReminders(state, localIso()).groups.filter((g) => wanted.has(g.email));
+  for (const g of chosen) S.markReminded(state, g.items.map((x) => x.key), { to: g.email, manual: true });
+  saveState();
+  return { marked: chosen.length, ...snapshot() };
 });
 
 handle('settings:save', (settings) => { S.saveSettings(state, settings); saveState(); return snapshot(); });

@@ -37,6 +37,13 @@ function checkStructure(data) {
     if (m.paymentMethod != null && !['', 'Contanti', 'POS', 'Bonifico'].includes(m.paymentMethod)) add(`Tessera ${key}: metodo di pagamento non valido.`);
     if (m.printed && m.receiptNo != null && !Number.isInteger(m.receiptNo)) add(`Tessera ${key}: numero ricevuta non valido.`);
   }
+  for (const [id, p] of Object.entries(data.persons)) if (p && p.noEmail != null && typeof p.noEmail !== 'boolean') add(`Anagrafica ${id}: esclusione email non valida.`);
+  for (const [key, m] of Object.entries(data.memberships)) {
+    const r = m && m.reminders;
+    if (r == null) continue;
+    if (typeof r !== 'object' || (r.pre && (typeof r.pre.sentAt !== 'string' || isNaN(new Date(r.pre.sentAt))))) add(`Tessera ${key}: dati dell'avviso email non validi.`);
+  }
+  if (data.mailLog != null && !Array.isArray(data.mailLog)) add('Registro degli invii email non valido.');
   const s = data.settings;
   if (s && s.nextReceipt != null && !(Number.isInteger(Number(s.nextReceipt)) && Number(s.nextReceipt) >= 1)) add('Il prossimo numero di ricevuta non è valido.');
   return errors;

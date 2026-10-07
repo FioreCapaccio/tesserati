@@ -1,6 +1,8 @@
 'use strict';
 // Logica dei dati (senza dipendenze da Electron): importazione, aggiornamenti, stampa.
 
+const { DEFAULT_SUBJECT, DEFAULT_BODY } = require('./reminders');
+
 const DEFAULT_SETTINGS = {
   assoc: { nome: '', indirizzo: '', cf: '', telefono: '', email: '', logo: '', nota: '' },
   nextReceipt: 1,
@@ -12,10 +14,18 @@ const DEFAULT_SETTINGS = {
   csvPath: '',
   defaultPayment: '', // '' = da indicare a mano sulla ricevuta
   theme: 'system', // 'system' | 'light' | 'dark'
+  mail: {
+    provider: 'gmail', // 'gmail' | 'outlook' | 'altro'
+    host: '', port: 587, secure: false, // solo per 'altro'
+    user: '', fromName: '', replyTo: '',
+    daysBefore: 30,
+    subject: DEFAULT_SUBJECT,
+    body: DEFAULT_BODY,
+  },
 };
 
 function emptyState() {
-  return { version: 1, settings: structuredClone(DEFAULT_SETTINGS), persons: {}, memberships: {}, imports: [] };
+  return { version: 1, settings: structuredClone(DEFAULT_SETTINGS), persons: {}, memberships: {}, imports: [], mailLog: [] };
 }
 
 function normalizeState(s) {
@@ -23,9 +33,11 @@ function normalizeState(s) {
   const out = Object.assign(base, s || {});
   out.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), (s && s.settings) || {});
   out.settings.assoc = Object.assign({}, DEFAULT_SETTINGS.assoc, (s && s.settings && s.settings.assoc) || {});
+  out.settings.mail = Object.assign({}, DEFAULT_SETTINGS.mail, (s && s.settings && s.settings.mail) || {});
   out.persons = out.persons || {};
   out.memberships = out.memberships || {};
   out.imports = out.imports || [];
+  out.mailLog = Array.isArray(out.mailLog) ? out.mailLog : [];
   return out;
 }
 
@@ -111,7 +123,22 @@ function updateMemberships(state, keys, patch) {
 
 function updatePerson(state, id, patch) {
   const p = state.persons[id];
-  if (p && 'note' in patch) p.note = String(patch.note || '');
+  if (!p) return;
+  if ('note' in patch) p.note = String(patch.note || '');
+  if ('noEmail' in patch) p.noEmail = !!patch.noEmail;
+}
+
+// Segna come avvisate le tessere (invio riuscito o già avvisate in altro modo).
+function markReminded(state, keys, { to = '', at = new Date().toISOString(), manual = false } = {}) {
+  for (const k of keys) {
+    const m = state.memberships[k];
+    if (!m) continue;
+    m.reminders = Object.assign({}, m.reminders, { pre: { sentAt: at, to, manual } });
+  }
+}
+
+function addMailLog(state, entries) {
+  state.mailLog = (state.mailLog || []).concat(entries).slice(-500);
 }
 
 // Applica l'esito di una stampa riuscita: numerazione, quota, flag "stampata".
@@ -138,7 +165,18 @@ function saveSettings(state, settings) {
   s.warnDays = Math.max(s.soonDays + 1, parseInt(s.warnDays, 10) || 90);
   if (!['system', 'light', 'dark'].includes(s.theme)) s.theme = 'system';
   if (!validPayment(s.defaultPayment)) s.defaultPayment = '';
+  const m = s.mail;
+  if (!['gmail', 'outlook', 'altro'].includes(m.provider)) m.provider = 'gmail';
+  m.user = String(m.user || '').trim().toLowerCase();
+  m.replyTo = String(m.replyTo || '').trim();
+  m.fromName = String(m.fromName || '').trim();
+  m.host = String(m.host || '').trim();
+  m.port = Math.min(65535, Math.max(1, parseInt(m.port, 10) || 587));
+  m.secure = !!m.secure;
+  m.daysBefore = Math.min(120, Math.max(1, parseInt(m.daysBefore, 10) || 30));
+  if (!String(m.subject || '').trim()) m.subject = DEFAULT_SUBJECT;
+  if (!String(m.body || '').trim()) m.body = DEFAULT_BODY;
   state.settings = s;
 }
 
-module.exports = { PAYMENT_METHODS, DEFAULT_SETTINGS, emptyState, normalizeState, importRecords, updateMemberships, updatePerson, commitPrint, saveSettings, mKey };
+module.exports = { markReminded, addMailLog, PAYMENT_METHODS, DEFAULT_SETTINGS, emptyState, normalizeState, importRecords, updateMemberships, updatePerson, commitPrint, saveSettings, mKey };

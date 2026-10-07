@@ -9,6 +9,11 @@ const call = async (channel, payload) => {
 
 contextBridge.exposeInMainWorld('api', {
   getState: () => call('state:get'),
+  saveMailSecret: (pw) => call('mail:save-secret', pw),
+  mailDue: () => call('mail:due'),
+  mailTest: () => call('mail:test'),
+  mailSend: (emails) => call('mail:send', { emails }),
+  mailMarkSent: (emails) => call('mail:mark-sent', { emails }),
   setTheme: (t) => call('theme:set', t),
   saveSettings: (s) => call('settings:save', s),
   importCsv: (opts) => call('import:run', opts || {}),
