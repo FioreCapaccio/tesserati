@@ -10,7 +10,11 @@ I dati restano solo sul computer.
    Il primo caricamento segna le tessere come *già stampate*; dalle letture successive risultano **Da stampare** solo i tesserati nuovi (o i rinnovi).
 3. **Da stampare / Tesserati**: seleziona le righe → *Stampa ricevute* (anteprima, data, numero iniziale, quota) → stampa o PDF.
    Dopo la stampa il flag "stampata" e il progressivo vengono salvati.
-4. **Calendario**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
+4. **Avvisi di rinnovo** (menu *Avvisi*): l'app elenca le tessere che scadono entro 30 giorni (modificabile) e non hanno ancora ricevuto l'avviso,
+   una email per indirizzo (le famiglie con la stessa email ricevono un solo messaggio). Anteprima, selezione, *Invia selezionati* con conferma.
+   Mittente Gmail o Outlook con **password per app** (guida in Impostazioni → *Email di avviso*), salvata cifrata dal sistema e **non** inclusa nei backup.
+   Si può escludere un singolo tesserato dalla scheda; chi non ha un'email valida viene segnalato.
+5. **Calendario**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
    (soglie modificabili). L'occhio barrato rimuove una tessera dal calendario (resta nell'archivio).
 
 ## Sviluppo

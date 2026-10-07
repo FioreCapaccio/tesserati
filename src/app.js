@@ -18,6 +18,7 @@ const ICON = {
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15 6.7L21 16"/><path d="M16 16h5v5"/></svg>',
   eyeoff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -43,11 +44,13 @@ const App = {
   sort: { key: 'cognome', dir: 1 },
   cal: { y: new Date().getFullYear(), m: new Date().getMonth(), mode: 'mese', day: null, showHidden: false },
   busy: false,
+  avvisi: null, avSel: new Set(), avKnown: new Set(), avLoading: false,
 };
 
 function setData(snap) {
   App.data = snap.state;
-  for (const k of ['dataFile', 'version', 'copyright', 'csv', 'defaultDataFile']) if (snap[k] !== undefined) App[k] = snap[k];
+  for (const k of ['dataFile', 'version', 'copyright', 'csv', 'defaultDataFile', 'mail']) if (snap[k] !== undefined) App[k] = snap[k];
+  App.avvisi = null; // i dati degli avvisi si ricalcolano alla prossima apertura
 }
 const S = () => App.data.settings;
 
@@ -96,6 +99,7 @@ function renderSide() {
     ${item('lista', 'users', 'Tesserati')}
     ${item('stampare', 'print', 'Da stampare', todo.length)}
     ${item('calendario', 'cal', 'Calendario')}
+    ${item('avvisi', 'mail', 'Avvisi', App.mail ? App.mail.dueCount : 0)}
     ${item('impostazioni', 'cog', 'Impostazioni')}
     <div class="side-bottom">
       <div class="meta">${last ? `Ultimo caricamento<br><b>${new Date(last.at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</b>${last.nuovi && !last.firstImport ? ` · ${last.nuovi} nuovi` : ''}` : 'Nessun file ancora caricato'}</div>
@@ -112,6 +116,7 @@ function render() {
   if (!Object.keys(App.data.memberships).length && App.view !== 'impostazioni') body = welcome();
   else if (App.view === 'lista' || App.view === 'stampare') body = listView();
   else if (App.view === 'calendario') body = calendarView();
+  else if (App.view === 'avvisi') body = avvisiView();
   else body = settingsView();
   main.innerHTML = `<div class="view">${body}</div><footer class="app-foot">Tesserati · versione ${esc(App.version || '')} · ${esc(App.copyright || '')}</footer>`;
   main.scrollTop = scroll;
@@ -270,6 +275,7 @@ function renderDrawer() {
         <dt>Cellulare</dt><dd>${esc(p.cell) || '—'}</dd>
         <dt>Indirizzo</dt><dd>${esc(p.indirizzo) || '—'}</dd>
         <dt>Città</dt><dd>${esc(p.citta) || '—'}</dd>
+        <dt>Avvisi email</dt><dd><label class="check" style="color:var(--ink)"><input type="checkbox" id="noemail" ${p.noEmail ? 'checked' : ''}> Non inviare avvisi di rinnovo</label></dd>
       </dl></div>
       <div class="d-sec"><h3>Tessera selezionata</h3><dl class="kv">
         <dt>Iscrizione</dt><dd>${fmt(m.iscrizione)}${m.iscrizioneOra ? ` <span style="color:var(--muted)">${esc(m.iscrizioneOra)}</span>` : ''}</dd>
@@ -277,6 +283,7 @@ function renderDrawer() {
         <dt>Stato</dt><dd>${esc(m.stato)}</dd>
         <dt>Ricevuta</dt><dd>${m.printed ? `Stampata${m.printedAt ? ' il ' + new Date(m.printedAt).toLocaleDateString('it-IT') : ' (già prima del primo caricamento)'}${m.receiptNo ? ` · n° ${esc(m.receiptLabel || m.receiptNo)}` : ''}` : 'Da stampare'}</dd>
         <dt>Quota (€)</dt><dd><div class="inline-field"><input class="field" id="quota" value="${esc(m.quota)}" placeholder="vuoto = a mano" inputmode="decimal"><button class="btn sm" data-act="save-quota">Salva</button></div></dd>
+        <dt>Avviso email</dt><dd>${m.reminders && m.reminders.pre ? `Inviato il ${new Date(m.reminders.pre.sentAt).toLocaleDateString('it-IT')}${m.reminders.pre.to ? ' a ' + esc(m.reminders.pre.to) : ''}${m.reminders.pre.manual ? ' <span style="color:var(--muted)">(segnato a mano)</span>' : ''}` : '<span style="color:var(--muted)">Non ancora inviato</span>'}</dd>
         <dt>Pagamento</dt><dd><select class="field" id="pay" aria-label="Metodo di pagamento">${payOptions(m.paymentMethod, 'Non indicato')}</select></dd>
       </dl></div>
       <div class="d-sec"><h3>Storico tessere (${hist.length})</h3><div class="hist">
@@ -363,6 +370,96 @@ function yearGrid(rows) {
   }).join('')}</div>`;
 }
 
+// ======================= Avvisi email =======================
+async function loadAvvisi() {
+  if (App.avLoading) return;
+  App.avLoading = true;
+  try {
+    const d = await window.api.mailDue();
+    for (const g of d.groups) if (!App.avKnown.has(g.email)) { App.avKnown.add(g.email); App.avSel.add(g.email); }
+    App.avvisi = d;
+  } catch (e) { toast('Errore: ' + e.message); App.avvisi = { groups: [], skipped: { senzaEmail: [], nonAttivi: 0, escluse: 0, nascoste: 0 }, log: [], today: todayIso() }; }
+  finally { App.avLoading = false; if (App.view === 'avvisi') render(); }
+}
+
+function mailConfigured() { const m = S().mail; return !!(m.user && App.mail && App.mail.hasSecret); }
+
+function avvisiView() {
+  if (!App.avvisi) { loadAvvisi(); return '<div class="page-head"><div><h1>Avvisi di rinnovo</h1><p>Calcolo in corso…</p></div></div>'; }
+  const d = App.avvisi, m = S().mail;
+  const sel = d.groups.filter((g) => App.avSel.has(g.email));
+  const selPeople = sel.reduce((a, g) => a + g.items.length, 0);
+  const sk = d.skipped;
+  const skipBits = [
+    sk.senzaEmail.length ? `<b>${sk.senzaEmail.length}</b> senza email valida` : '', sk.escluse ? `<b>${sk.escluse}</b> esclusi dagli avvisi` : '',
+    sk.nonAttivi ? `<b>${sk.nonAttivi}</b> sospesi` : '', sk.nascoste ? `<b>${sk.nascoste}</b> rimossi dal calendario` : '',
+  ].filter(Boolean);
+  return `
+    <div class="page-head">
+      <div><h1>Avvisi di rinnovo</h1>
+        <p>Tessere in scadenza entro ${m.daysBefore} giorni che non hanno ancora ricevuto l’avviso. Nulla parte senza la tua conferma.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" data-act="avvisi-mark" ${sel.length ? '' : 'disabled'}>Segna come già avvisati</button>
+        <button class="btn primary" data-act="avvisi-send" ${sel.length && mailConfigured() ? '' : 'disabled'}>${ICON.mail} Invia selezionati (${sel.length})</button>
+      </div>
+    </div>
+    ${mailConfigured() ? '' : `<div class="notice">Per inviare le email serve configurare il mittente e la password per app. <button class="btn sm" data-nav="impostazioni">Vai alle Impostazioni</button></div>`}
+    ${skipBits.length ? `<p class="skipline">Non inclusi: ${skipBits.join(' · ')}.${sk.senzaEmail.length ? ` <button class="linkbtn" data-act="avvisi-noemail-list">Vedi chi</button>` : ''}</p>` : ''}
+    ${d.groups.length ? `<div class="tablewrap"><table><thead><tr>
+      <th class="cbx"><input type="checkbox" id="av-all" ${sel.length === d.groups.length ? 'checked' : ''} aria-label="Seleziona tutti"></th>
+      <th>Destinatario</th><th>Tesserati</th><th>Scadenza</th><th></th></tr></thead><tbody>
+      ${d.groups.map((g) => `<tr data-avrow="${esc(g.email)}">
+        <td class="cbx"><input type="checkbox" data-avsel="${esc(g.email)}" ${App.avSel.has(g.email) ? 'checked' : ''} aria-label="Seleziona ${esc(g.email)}"></td>
+        <td class="name">${esc(g.email)}</td>
+        <td>${g.items.map((i) => `<div>${esc(i.cognome)} ${esc(i.nome)}</div>`).join('')}</td>
+        <td>${g.items.map((i) => `<div><span class="dot ${i.days <= 7 ? 'soon' : 'warn'}"></span> ${fmt(i.scadenza)} <small style="color:var(--muted)">${i.days === 0 ? 'oggi' : 'tra ' + i.days + ' gg'}</small></div>`).join('')}</td>
+        <td style="text-align:right"><button class="btn sm" data-act="avvisi-preview" data-email="${esc(g.email)}">Anteprima</button></td></tr>`).join('')}
+      </tbody></table><div class="tfoot">${d.groups.length} email · ${d.groups.reduce((a, g) => a + g.items.length, 0)} tesserati${sel.length ? ` · selezionate ${sel.length} (${selPeople} tesserati)` : ''}</div></div>`
+    : `<div class="empty"><h2>Nessun avviso da inviare</h2><p>Non ci sono tessere in scadenza nei prossimi ${m.daysBefore} giorni senza avviso già inviato.</p></div>`}
+    <h2 style="font-size:21px;margin:30px 0 10px">Ultimi invii</h2>
+    ${d.log.length ? `<div class="tablewrap"><table><thead><tr><th>Data</th><th>Destinatario</th><th>Tesserati</th><th>Esito</th></tr></thead><tbody>
+      ${d.log.map((l) => `<tr style="cursor:default"><td class="num">${new Date(l.at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(l.to)}</td><td>${esc(l.names)}</td>
+        <td>${l.ok ? '<span class="badge ok">Inviata</span>' : `<span class="badge expired" title="${esc(l.error)}">Errore</span> <small style="color:var(--muted)">${esc(l.error)}</small>`}</td></tr>`).join('')}</tbody></table></div>`
+    : '<p style="color:var(--muted)">Nessun invio ancora.</p>'}`;
+}
+
+function showMailPreview(email) {
+  const g = App.avvisi.groups.find((x) => x.email === email);
+  if (!g) return;
+  openModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><header><h2 id="mt">Anteprima email</h2></header>
+    <div class="mbody"><dl class="kv" style="margin-bottom:12px"><dt>Da</dt><dd>${esc(S().mail.fromName || S().assoc.nome)} &lt;${esc(S().mail.user || 'indirizzo non impostato')}&gt;</dd><dt>A</dt><dd>${esc(g.to)}</dd><dt>Oggetto</dt><dd>${esc(g.subject)}</dd></dl>
+    <pre class="mailtext">${esc(g.text)}</pre></div>
+    <footer><button class="btn primary" data-act="close-modal">Chiudi</button></footer></div>`);
+}
+
+function confirmSend() {
+  const sel = App.avvisi.groups.filter((g) => App.avSel.has(g.email));
+  if (!sel.length) return;
+  const people = sel.reduce((a, g) => a + g.items.length, 0);
+  const secs = Math.min(sel.length, 100);
+  openModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><header><h2 id="mt">Inviare ${sel.length} email?</h2></header>
+    <div class="mbody"><p style="margin:0">Partiranno da <b>${esc(S().mail.user)}</b> verso <b>${sel.length}</b> indirizzi (${people} tesserati). Le email inviate non si possono richiamare.</p>
+    <p style="color:var(--muted)">Un messaggio al secondo: circa ${secs} secondi.${sel.length > 100 ? ' <b>Per ogni operazione ne partono al massimo 100</b>: gli altri restano da inviare.' : ''}</p></div>
+    <footer><button class="btn" data-act="close-modal">Annulla</button><button class="btn primary" data-act="avvisi-send-go">Invia ora</button></footer></div>`);
+}
+
+async function doSendAvvisi() {
+  const emails = [...App.avSel];
+  openModal(`<div class="modal"><header><h2>Invio in corso…</h2></header><div class="mbody"><p>Sto inviando ${emails.length} email. Non chiudere l’app.</p></div></div>`);
+  try {
+    const r = await window.api.mailSend(emails);
+    setData(r);
+    const bad = r.results.filter((x) => !x.ok);
+    const why = r.stopped === 'auth' ? 'L’invio si è fermato perché il server ha rifiutato l’accesso: controlla indirizzo e password per app.' : r.stopped === 'limit' ? 'Raggiunto il tetto di 100 invii: gli altri restano da inviare, ripeti l’operazione.' : '';
+    openModal(`<div class="modal"><header><h2>${bad.length ? 'Invio terminato con problemi' : 'Invio completato'}</h2></header><div class="mbody">
+      <div class="stats" style="grid-template-columns:repeat(2,1fr)"><div class="stat ${r.sent ? 'hl' : ''}"><b>${r.sent}</b><span>inviate</span></div><div class="stat"><b>${bad.length}</b><span>non inviate</span></div></div>
+      ${why ? `<p>${esc(why)}</p>` : ''}
+      ${bad.length ? `<ul class="warns">${bad.slice(0, 12).map((x) => `<li>${esc(x.to)}: ${esc(x.error)}</li>`).join('')}${bad.length > 12 ? `<li>…e altre ${bad.length - 12}</li>` : ''}</ul><p style="color:var(--muted)">Quelle non inviate restano nell’elenco: puoi riprovare.</p>` : ''}
+    </div><footer><button class="btn primary" data-act="close-modal">Chiudi</button></footer></div>`);
+    render();
+  } catch (e) { closeModal(); toast('Errore: ' + e.message); }
+}
+
 // ======================= Impostazioni =======================
 function csvBlock() {
   const c = App.csv;
@@ -407,7 +504,37 @@ function settingsView() {
           ${inp('s-soon', 'Arancione: scade entro (giorni)', s.soonDays, 'type="number" min="1"')}
           ${inp('s-warn', 'Giallo: scade entro (giorni)', s.warnDays, 'type="number" min="2"')}
         </div></section>
-      <div class="savebar"><button class="btn primary" data-act="save-settings">Salva impostazioni</button><span id="saved" style="color:var(--muted)">Salva Associazione, Ricevute e Calendario. Le sezioni qui sotto agiscono subito.</span></div>
+      <section class="card" id="mail-card"><h2>Email di avviso</h2>
+        <p>Per avvisare i tesserati prima della scadenza. Gli invii partono dalla tua casella e solo dopo la tua conferma nella schermata Avvisi.</p>
+        <div class="form">
+          <label>Provider<select class="field" id="m-provider">${[['gmail', 'Gmail'], ['outlook', 'Outlook / Hotmail'], ['altro', 'Altro server (SMTP)']].map(([v, l]) => `<option value="${v}" ${s.mail.provider === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${inp('m-user', 'Indirizzo email del mittente', s.mail.user, 'type="email" autocomplete="off"')}
+          ${inp('m-from', 'Nome del mittente (facoltativo)', s.mail.fromName, `placeholder="${esc(a.nome || 'Nome associazione')}"`)}
+          ${inp('m-reply', 'Rispondi a (facoltativo)', s.mail.replyTo, `type="email" placeholder="${esc(a.email || 'info@…')}"`)}
+          <div class="wide form" id="m-custom" ${s.mail.provider === 'altro' ? '' : 'hidden'} style="padding:0">
+            ${inp('m-host', 'Server SMTP', s.mail.host, 'placeholder="smtp.esempio.it"')}
+            ${inp('m-port', 'Porta', s.mail.port, 'type="number" min="1" max="65535"')}
+            <label class="check" style="grid-column:1/-1"><input type="checkbox" id="m-secure" ${s.mail.secure ? 'checked' : ''}> Connessione protetta SSL diretta (porta 465); lascia spento per STARTTLS (587)</label>
+          </div>
+          ${inp('m-days', 'Avvisa quando mancano al massimo (giorni)', s.mail.daysBefore, 'type="number" min="1" max="120"')}
+          <div class="wide"><label style="margin-bottom:4px">Password per app</label>
+            <div class="inline-field"><input class="field" id="m-pass" type="password" autocomplete="new-password" placeholder="${App.mail && App.mail.hasSecret ? '•••••••• (salvata)' : 'incolla qui la password per app'}" style="width:260px">
+              <button class="btn sm" data-act="save-mail-secret">Salva password</button>
+              ${App.mail && App.mail.hasSecret ? '<button class="btn sm danger" data-act="remove-mail-secret">Rimuovi</button>' : ''}</div>
+            <div style="color:var(--muted);font-size:13px;margin-top:6px">${App.mail && App.mail.canEncrypt === false ? '⚠ La cifratura sicura non è disponibile su questo computer: la password non può essere salvata.' : 'Conservata cifrata dal sistema (Portachiavi / Windows), fuori dall’archivio e dai backup. Su un altro computer va reinserita.'}</div></div>
+          <label class="wide">Oggetto<input class="field" id="m-subject" value="${esc(s.mail.subject)}"></label>
+          <label class="wide">Testo del messaggio<textarea class="field" id="m-body" rows="11">${esc(s.mail.body)}</textarea></label>
+          <div class="wide" style="color:var(--muted);font-size:13px">Segnaposto: <code>{elenco}</code> (nomi e date di scadenza), <code>{associazione}</code>, <code>{contatti}</code> (telefono, email e sede da “Associazione”). Il testo riporta la data di scadenza, mai “tra 30 giorni”.</div>
+        </div>
+        <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">Come ottenere la password per app</summary>
+          <div style="margin-top:8px;color:var(--muted);line-height:1.55">
+            <b style="color:var(--ink)">Gmail</b>: attiva la verifica in due passaggi sull’account Google, poi apri “Password per le app” (Account Google → Sicurezza), crea una password chiamata “Tesserati” e incolla qui le 16 lettere.<br>
+            <b style="color:var(--ink)">Outlook / Hotmail</b>: Account Microsoft → Sicurezza → Opzioni di sicurezza avanzate: attiva la verifica in due passaggi e crea una “password per app”. Gli account Microsoft 365 aziendali possono richiedere che l’amministratore abiliti l’SMTP.<br>
+            Non usare la password normale dell’account: non funzionerebbe e non è sicuro.</div></details>
+        <div class="d-actions" style="margin-top:14px"><button class="btn" data-act="mail-test">Invia email di prova a me stesso</button>
+          <span style="color:var(--muted);font-size:13px;align-self:center">Usa le impostazioni qui sopra (le salva prima).</span></div>
+      </section>
+      <div class="savebar"><button class="btn primary" data-act="save-settings">Salva impostazioni</button><span id="saved" style="color:var(--muted)">Salva Associazione, Ricevute, Calendario ed Email di avviso. Le sezioni qui sotto agiscono subito.</span></div>
       <section class="card"><h2>File CSV da leggere</h2>
         <p>Di norma il file esportato da Younity si trova nella cartella <b>Download</b>: l'app cerca lì il file <i>Younity…csv</i> più recente. Puoi indicare un'altra cartella oppure un file preciso.</p>
         ${csvBlock()}
@@ -438,6 +565,7 @@ function readSettingsForm() {
     assoc: Object.assign({}, cur.assoc, { nome: v('s-nome'), indirizzo: v('s-indirizzo'), cf: v('s-cf'), telefono: v('s-telefono'), email: v('s-email'), nota: v('s-nota') }),
     nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'), defaultPayment: v('s-pay'),
     soonDays: v('s-soon'), warnDays: v('s-warn'),
+    mail: Object.assign({}, cur.mail, { provider: v('m-provider'), user: v('m-user'), fromName: v('m-from'), replyTo: v('m-reply'), host: v('m-host'), port: v('m-port'), secure: $('#m-secure').checked, daysBefore: v('m-days'), subject: v('m-subject'), body: v('m-body') }),
   });
 }
 
@@ -616,6 +744,7 @@ async function patch(keys, p, msg) {
 function go(view) {
   App.view = view;
   if (view === 'calendario' || view === 'impostazioni') App.detailKey = null;
+  if (view === 'avvisi') App.avvisi = null;
   App.sel.clear();
   if (view === 'stampare') App.filters.scad = '';
   render();
@@ -722,6 +851,34 @@ document.addEventListener('click', async (e) => {
         toast(r.useExisting ? 'Ora usi l’archivio presente nella nuova cartella.' : 'Archivio spostato nella nuova cartella.');
         break;
       }
+      case 'avvisi-preview': showMailPreview(act.dataset.email); break;
+      case 'avvisi-send': confirmSend(); break;
+      case 'avvisi-send-go': await doSendAvvisi(); break;
+      case 'avvisi-mark': {
+        const n = App.avSel.size;
+        if (!confirm(`Segnare ${n} destinatari come già avvisati, senza inviare nulla?`)) break;
+        setData(await window.api.mailMarkSent([...App.avSel])); render(); toast('Segnati come già avvisati.');
+        break;
+      }
+      case 'avvisi-noemail-list': {
+        const l = App.avvisi.skipped.senzaEmail;
+        openModal(`<div class="modal"><header><h2>Senza email valida</h2></header><div class="mbody"><p style="margin:0;color:var(--muted)">Non ricevono l’avviso: completa l’indirizzo nel CSV di Younity e rileggi il file.</p><ul class="warns">${l.map((x) => `<li>${esc(x.nome)} — scade il ${fmt(x.scadenza)}</li>`).join('')}</ul></div><footer><button class="btn primary" data-act="close-modal">Chiudi</button></footer></div>`);
+        break;
+      }
+      case 'save-mail-secret': {
+        const pw = $('#m-pass').value;
+        if (!pw) { toast('Incolla prima la password per app.'); break; }
+        setData(await window.api.saveMailSecret(pw)); render(); toast('Password salvata in modo cifrato.');
+        break;
+      }
+      case 'remove-mail-secret': setData(await window.api.saveMailSecret('')); render(); toast('Password rimossa.'); break;
+      case 'mail-test': {
+        setData(await window.api.saveSettings(readSettingsForm()));
+        toast('Invio della prova…');
+        const r = await window.api.mailTest();
+        toast(`Prova inviata a ${r.to}: controlla la posta.`);
+        break;
+      }
       case 'set-theme': setData(await window.api.setTheme(act.dataset.v)); render(); break;
       case 'show-data': await window.api.showDataFile(); break;
       default: break;
@@ -745,6 +902,13 @@ document.addEventListener('change', (e) => {
     App.filters[t.dataset.filter] = t.type === 'checkbox' ? t.checked : t.value;
     renderTable();
   } else if (t.hasAttribute('data-cal-hidden')) { App.cal.showHidden = t.checked; render(); }
+  else if (t.id === 'm-provider') $('#m-custom').hidden = t.value !== 'altro';
+  else if (t.id === 'av-all') { App.avvisi.groups.forEach((g) => (t.checked ? App.avSel.add(g.email) : App.avSel.delete(g.email))); render(); }
+  else if (t.dataset.avsel) { t.checked ? App.avSel.add(t.dataset.avsel) : App.avSel.delete(t.dataset.avsel); render(); }
+  else if (t.id === 'noemail' && App.detailKey) {
+    const pid = App.data.memberships[App.detailKey].personId;
+    window.api.updatePerson(pid, { noEmail: t.checked }).then((r) => { setData(r); render(); toast(t.checked ? 'Questo tesserato non riceverà avvisi email.' : 'Avvisi email riattivati.'); });
+  }
   else if (t.id === 'pay' && App.detailKey) patch([App.detailKey], { paymentMethod: t.value }, 'Metodo di pagamento salvato.');
 });
 document.addEventListener('input', (e) => {
@@ -775,6 +939,7 @@ document.addEventListener('keydown', (e) => {
   const snap = await window.api.getState();
   setData(snap);
   render();
+  if (snap.mail && snap.mail.dueCount > 0) toast(`${snap.mail.dueCount} avvisi di rinnovo pronti: apri “Avvisi”.`);
   if (snap.warning) openModal(`<div class="modal"><header><h2>Attenzione</h2></header><div class="mbody"><p>${esc(snap.warning)}</p></div><footer><button class="btn primary" data-act="close-modal">Ho capito</button></footer></div>`);
   // Se si lascia la finestra aperta a cavallo di mezzanotte, ricalcola i colori.
   let day = todayIso();

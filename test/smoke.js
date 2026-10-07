@@ -72,6 +72,32 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await shot('05-calendario-mese');
       await js(`document.querySelector('[data-cal=anno]').click()`);
       await shot('06-calendario-anno');
+      // ---- avvisi email (trasporto finto: nessuna rete) ----
+      st.settings.mail.user = 'associazione@gmail.com'; st.settings.mail.fromName = 'Il Sipario'; saveState();
+      await js(`window.api.getState().then(r=>{setData(r);render()})`);
+      await js(`document.querySelector('[data-nav=avvisi]').click()`); await wait(1200);
+      const nGroups = await js(`App.avvisi.groups.length`);
+      log('avvisi dovuti: email =', nGroups, '| tesserati =', await js(`App.avvisi.groups.reduce((a,g)=>a+g.items.length,0)`), '| senza email valida =', await js(`App.avvisi.skipped.senzaEmail.length`), '| badge menu =', await js(`document.querySelector('[data-nav=avvisi] .count').textContent`));
+      await shot('12-avvisi');
+      await js(`document.querySelector('[data-act=avvisi-preview]').click()`); await shot('13-anteprima-email');
+      await js(`closeModal()`);
+      await js(`document.querySelector('[data-avsel]').click()`); await wait(300);   // deseleziona il primo
+      await js(`document.querySelector('[data-act=avvisi-send]').click()`); await shot('14-conferma-invio');
+      await js(`document.querySelector('[data-act=avvisi-send-go]').click()`); await wait(2500);
+      await shot('15-esito-invio');
+      const sentLines = fs.existsSync(process.env.TESSERATI_MAIL_FAKE) ? fs.readFileSync(process.env.TESSERATI_MAIL_FAKE, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
+      const marked = Object.values(st.memberships).filter((m) => m.reminders && m.reminders.pre).length;
+      log('email inviate (file) =', sentLines.length, '| attese =', nGroups - 1, '| tessere segnate =', marked, '| registro =', st.mailLog.length, '| mittente =', JSON.stringify(sentLines[0] && sentLines[0].from), '| oggetto =', sentLines[0] && sentLines[0].subject);
+      await js(`closeModal()`);
+      await js(`document.querySelector('[data-nav=avvisi]').click()`); await wait(1200);
+      log('dopo invio, restano da inviare =', await js(`App.avvisi.groups.length`), '(la sola deselezionata)');
+      await shot('16-avvisi-dopo-invio');
+      await js(`document.querySelector('[data-nav=impostazioni]').click()`);
+      win.setSize(1440, 2600); await wait(500);
+      await js(`document.getElementById('mail-card').scrollIntoView()`);
+      await shot('17-impostazioni-email');
+      win.setSize(1440, 900); await wait(300);
+
       await js(`document.querySelector('[data-nav=impostazioni]').click()`);
       win.setSize(1440, 2300); await wait(400);
       await shot('07-impostazioni');
