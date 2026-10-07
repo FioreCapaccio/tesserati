@@ -103,6 +103,37 @@ console.log(`\n${n} test superati`);
   });
 }
 
+// ---- Professione (campo facoltativo) ----
+{
+  const B = require('../core/backup');
+  const rec = { id: '5', nome: 'Elsa', cognome: 'Verdi', nascita: '1985-05-05', provNascita: '', cf: 'E', email: 'e@x.it', cell: '', indirizzo: '', citta: '', iscrizione: '2026-03-01', iscrizioneOra: '', scadenza: '2027-02-28', stato: 'Attivo' };
+  const st = S.emptyState();
+  S.importRecords(st, [rec], {});
+  t('professione: vuota all\'inizio, salvata ripulita e limitata a 120 caratteri', () => {
+    assert.strictEqual(st.persons['5'].professione, '');
+    S.updatePerson(st, '5', { professione: '   Insegnante   di   teatro ' });
+    assert.strictEqual(st.persons['5'].professione, 'Insegnante di teatro');
+    S.updatePerson(st, '5', { professione: 'x'.repeat(300) });
+    assert.strictEqual(st.persons['5'].professione.length, 120);
+    S.updatePerson(st, '5', { professione: null });
+    assert.strictEqual(st.persons['5'].professione, '');
+  });
+  t('professione: la rilettura del CSV non la cancella', () => {
+    S.updatePerson(st, '5', { professione: 'Attrice' });
+    S.importRecords(st, [{ ...rec, citta: 'Pescara', email: 'nuova@x.it' }], {});
+    assert.strictEqual(st.persons['5'].professione, 'Attrice');
+    assert.strictEqual(st.persons['5'].citta, 'Pescara');             // i dati del CSV invece si aggiornano
+  });
+  t('professione: backup con valore non testuale rifiutato; vecchi backup senza campo ok', () => {
+    const bk = B.makeBackup(st, '1.2.0');
+    assert.ok(B.verifyBackup(JSON.parse(JSON.stringify(bk))).ok);
+    const bad = JSON.parse(JSON.stringify(bk)); bad.data.persons['5'].professione = 42; bad.sha256 = B.sha256(JSON.stringify(bad.data));
+    assert.ok(!B.verifyBackup(bad).ok);
+    const old = JSON.parse(JSON.stringify(bk)); delete old.data.persons['5'].professione; old.sha256 = B.sha256(JSON.stringify(old.data));
+    assert.ok(B.verifyBackup(old).ok);
+  });
+}
+
 // ---- Ricerca del CSV nella cartella Download ----
 {
   const os = require('os');

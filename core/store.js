@@ -90,7 +90,7 @@ function importRecords(state, records, { file = '', warnings = [], now = new Dat
     const p = state.persons[id];
     const data = {};
     for (const f of PERSON_FIELDS) data[f] = r[f];
-    if (!p) state.persons[id] = Object.assign({ id, addedAt: stamp, note: '' }, data);
+    if (!p) state.persons[id] = Object.assign({ id, addedAt: stamp, note: '', professione: '' }, data);
     else {
       for (const f of PERSON_FIELDS) if (p[f] !== data[f]) { Object.assign(p, data); break; }
     }
@@ -125,6 +125,7 @@ function updatePerson(state, id, patch) {
   const p = state.persons[id];
   if (!p) return;
   if ('note' in patch) p.note = String(patch.note || '');
+  if ('professione' in patch) p.professione = String(patch.professione || '').replace(/\s+/g, ' ').trim().slice(0, 120);
   if ('noEmail' in patch) p.noEmail = !!patch.noEmail;
 }
 

@@ -37,6 +37,7 @@ function checkStructure(data) {
     if (m.paymentMethod != null && !['', 'Contanti', 'POS', 'Bonifico'].includes(m.paymentMethod)) add(`Tessera ${key}: metodo di pagamento non valido.`);
     if (m.printed && m.receiptNo != null && !Number.isInteger(m.receiptNo)) add(`Tessera ${key}: numero ricevuta non valido.`);
   }
+  for (const [id, p] of Object.entries(data.persons)) if (p && p.professione != null && typeof p.professione !== 'string') add(`Anagrafica ${id}: professione non valida.`);
   for (const [id, p] of Object.entries(data.persons)) if (p && p.noEmail != null && typeof p.noEmail !== 'boolean') add(`Anagrafica ${id}: esclusione email non valida.`);
   for (const [key, m] of Object.entries(data.memberships)) {
     const r = m && m.reminders;

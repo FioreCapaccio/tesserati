@@ -43,6 +43,11 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await js(`window.api.setTheme('light').then(r=>{setData(r);render()})`);
       await js(`document.querySelector('tr[data-key]').click()`);
       await shot('02-scheda');
+      await js(`(()=>{const i=document.getElementById('professione');i.focus();i.value='  Insegnante   di teatro ';i.blur();})()`);
+      await wait(600);
+      const pid = Object.keys(st.persons).find((k) => st.persons[k].professione);
+      log('professione salvata =', JSON.stringify(pid && st.persons[pid].professione), '| nel campo =', await js(`document.getElementById('professione').value`));
+      await shot('02b-scheda-professione');
       await js(`document.querySelector('[data-nav=stampare]').click()`);
       await shot('03-da-stampare');
       await js(`document.querySelector('[data-act=print-all-todo]').click()`);
@@ -127,6 +132,13 @@ module.exports = ({ win, state, saveState, S, app }) => {
       const applied = await js(`window.api.applyBackup(${JSON.stringify(good)}).then(r=>'ok, copia di sicurezza: '+r.safety, e=>'ERRORE '+e.message)`);
       log('ripristino copia buona ->', applied, '| da stampare dopo:', Object.values(state().memberships).filter((m) => !m.printed).length);
       log('file copia di sicurezza esiste:', fs.existsSync(path.join(process.env.TESSERATI_USERDATA, 'tesserati-data.json.prima-del-ripristino.json')));
+      await js(`document.querySelector('[data-nav=lista]').click()`);
+      await js(`(()=>{const q=document.querySelector('input.search');q.value='insegnante di teatro';q.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await wait(300);
+      log('ricerca per professione, righe trovate =', await js(`document.querySelectorAll('#tbody tr').length`));
+      log('pulsante Chiudi app presente =', await js(`!!document.querySelector('[data-act=quit-app]')`));
+      await js(`document.querySelector('[data-act=quit-app]').click()`);
+      await wait(2500);
       const errs = await js(`window.__errs || []`);
       log('fine', errs);
     } catch (e) {
