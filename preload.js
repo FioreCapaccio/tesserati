@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   mailTest: () => call('mail:test'),
   mailSend: (emails) => call('mail:send', { emails }),
   mailMarkSent: (emails) => call('mail:mark-sent', { emails }),
+  quit: () => call('app:quit'),
   setTheme: (t) => call('theme:set', t),
   saveSettings: (s) => call('settings:save', s),
   importCsv: (opts) => call('import:run', opts || {}),

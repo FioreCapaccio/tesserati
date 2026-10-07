@@ -305,6 +305,9 @@ handle('backup:apply', async ({ path: file }) => {
   return { safety, ...snapshot() };
 });
 
+// Chiusura dell'app: i dati sono già salvati a ogni modifica.
+handle('app:quit', () => { if (process.env.TESSERATI_SMOKE) console.log('[quit richiesto]'); setImmediate(() => app.quit()); return true; });
+
 handle('shell:showData', () => { shell.showItemInFolder(dataFile); return true; });
 
 // ---------- Stampa ricevute ----------

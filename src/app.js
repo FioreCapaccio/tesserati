@@ -18,6 +18,7 @@ const ICON = {
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>',
   mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15 6.7L21 16"/><path d="M16 16h5v5"/></svg>',
   eyeoff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>',
@@ -104,6 +105,7 @@ function renderSide() {
     <div class="side-bottom">
       <div class="meta">${last ? `Ultimo caricamento<br><b>${new Date(last.at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</b>${last.nuovi && !last.firstImport ? ` · ${last.nuovi} nuovi` : ''}` : 'Nessun file ancora caricato'}</div>
       <button class="btn-reload" data-act="reload" ${App.busy ? 'disabled' : ''}>${ICON.sync}<span>${App.busy ? 'Lettura…' : 'Rileggi file'}</span></button>
+      <button class="btn-quit" data-act="quit-app">${ICON.power}<span>Chiudi app</span></button>
       <div class="meta ver">v${esc(App.version || '')}</div>
     </div>`;
 }
@@ -179,7 +181,7 @@ function filteredRows() {
   if (!todoMode && f.stampa) rows = rows.filter((r) => (f.stampa === 'todo') === !r.m.printed);
   if (q.length) {
     rows = rows.filter((r) => {
-      const hay = norm([r.p.nome, r.p.cognome, r.p.cognome + ' ' + r.p.nome, r.p.id, r.p.cf, r.p.email, r.p.cell, r.p.citta, r.p.indirizzo].join(' '));
+      const hay = norm([r.p.nome, r.p.cognome, r.p.cognome + ' ' + r.p.nome, r.p.id, r.p.cf, r.p.email, r.p.cell, r.p.citta, r.p.indirizzo, r.p.professione].join(' '));
       return q.every((t) => hay.includes(t));
     });
   }
@@ -269,6 +271,7 @@ function renderDrawer() {
         <dt>Data di nascita</dt><dd>${fmt(p.nascita)}${a != null ? ` <span style="color:var(--muted)">(${a} anni)</span>` : ''}</dd>
         <dt>Provincia nascita</dt><dd>${esc(p.provNascita) || '<span style="color:var(--muted)">Estero / non indicata</span>'}</dd>
         <dt>Codice fiscale</dt><dd>${esc(p.cf)}</dd>
+        <dt>Professione</dt><dd><input class="field" id="professione" value="${esc(p.professione || '')}" maxlength="120" placeholder="facoltativa" autocomplete="off" aria-label="Professione svolta" style="width:100%"></dd>
       </dl></div>
       <div class="d-sec"><h3>Contatti e residenza</h3><dl class="kv">
         <dt>Email</dt><dd>${esc(p.email) || '—'}</dd>
@@ -880,6 +883,10 @@ document.addEventListener('click', async (e) => {
         break;
       }
       case 'set-theme': setData(await window.api.setTheme(act.dataset.v)); render(); break;
+      case 'quit-app':
+        if (App.busy && !confirm('Una lettura del file è in corso. Chiudere comunque?')) break;
+        await window.api.quit();
+        break;
       case 'show-data': await window.api.showDataFile(); break;
       default: break;
     }
@@ -920,6 +927,11 @@ document.addEventListener('input', (e) => {
   }
 });
 document.addEventListener('focusout', async (e) => {
+  if (e.target.id === 'professione' && App.detailKey) {
+    const p = App.data.persons[App.data.memberships[App.detailKey].personId];
+    const val = e.target.value.replace(/\s+/g, ' ').trim();
+    if (p && (p.professione || '') !== val) { setData(await window.api.updatePerson(p.id, { professione: val })); e.target.value = val; toast(val ? 'Professione salvata.' : 'Professione rimossa.'); }
+  }
   if (e.target.id === 'note' && App.detailKey) {
     const m = App.data.memberships[App.detailKey];
     const p = App.data.persons[m.personId];
@@ -927,6 +939,7 @@ document.addEventListener('focusout', async (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.id === 'professione') { e.target.blur(); return; }
   if (e.key === 'Escape') {
     if ($('#modal-root').firstChild) closeModal();
     else if (App.detailKey) { App.detailKey = null; renderTableIfAny(); renderDrawer(); }
