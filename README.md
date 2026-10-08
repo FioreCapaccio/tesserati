@@ -14,7 +14,12 @@ I dati restano solo sul computer.
    una email per indirizzo (le famiglie con la stessa email ricevono un solo messaggio). Anteprima, selezione, *Invia selezionati* con conferma.
    Mittente Gmail o Outlook con **password per app** (guida in Impostazioni → *Email di avviso*), salvata cifrata dal sistema e **non** inclusa nei backup.
    Si può escludere un singolo tesserato dalla scheda; chi non ha un'email valida viene segnalato.
-5. **Calendario**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
+5. **Inserire, modificare, eliminare** un tesserato (scheda → *Modifica dati* / *Elimina tesserato*, pulsante *Nuovo tesserato* nell'elenco):
+   gli inseriti a mano hanno ID `M001`, `M002`… e la tessera risulta *da stampare*. I dati del CSV modificati a mano **restano tali** anche dopo *Rileggi file*
+   (si può tornare ai dati di Younity dalla scheda). L'eliminazione sposta il tesserato nel **Cestino** (Impostazioni): la lettura del CSV non lo fa tornare finché è lì.
+6. **Tipo di ricevuta**: *iscrizione annuale* (numero legato alla tessera, una ristampa lo mantiene) oppure *retta mensile* (con il mese; ogni stampa ha un numero nuovo
+   e la tessera non cambia). Tutte le ricevute emesse sono elencate nella scheda del tesserato.
+7. **Calendario**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
    (soglie modificabili). L'occhio barrato rimuove una tessera dal calendario (resta nell'archivio).
 
 ## Sviluppo

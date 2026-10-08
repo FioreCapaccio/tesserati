@@ -134,6 +134,162 @@ console.log(`\n${n} test superati`);
   });
 }
 
+// ---- Inserimento, modifica ed eliminazione manuale ----
+{
+  const P = require('../core/people');
+  const B = require('../core/backup');
+  const TODAY = '2026-10-08';
+  const rec = (id, nome, cognome, o = {}) => ({ id, nome, cognome, nascita: o.nascita || '1990-01-01', provNascita: 'PE', cf: o.cf || ('CF' + id.padStart(14, '0')), email: o.email || `${nome.toLowerCase()}@x.it`, cell: '', indirizzo: 'Via X 1', citta: 'Pescara', iscrizione: o.isc || '2026-01-10', iscrizioneOra: '', scadenza: o.scad || '2027-01-09', stato: o.stato || 'Attivo' });
+  const withCsv = (...r) => { const s = S.emptyState(); S.importRecords(s, r, {}); return s; };
+
+  t('manuale: creazione pulita, ID M001, tessera da stampare, scadenza = 1 anno', () => {
+    const s = S.emptyState();
+    const r = P.createPerson(s, { nome: 'anna maria', cognome: 'DE LUCA', nascita: '1985-03-02', cf: 'dlcnmr85c42g482x', email: 'ANNA@Mail.it', cell: '333 1234567', iscrizione: '2026-10-08' }, { today: TODAY });
+    assert.strictEqual(r.personId, 'M001'); assert.strictEqual(r.key, 'M001_2026-10-08');
+    const p = s.persons.M001, m = s.memberships[r.key];
+    assert.deepStrictEqual([p.nome, p.cognome, p.cf, p.email, p.cell, p.manual], ['Anna Maria', 'De Luca', 'DLCNMR85C42G482X', 'anna@mail.it', '3331234567', true]);
+    assert.deepStrictEqual([m.scadenza, m.stato, m.printed, m.manual], ['2027-10-07', 'Attivo', false, true]);
+    assert.strictEqual(P.createPerson(s, { nome: 'Luca', cognome: 'Neri' }, { today: TODAY }).personId, 'M002');
+  });
+  t('manuale: scadenza 29 febbraio e 31 dicembre', () => {
+    assert.strictEqual(P.addYear('2024-02-29'), '2025-02-28'); assert.strictEqual(P.addYear('2026-12-31'), '2027-12-30'); assert.strictEqual(P.addYear('2026-03-01'), '2027-02-28');
+  });
+  t('manuale: campi obbligatori e formati rifiutati con messaggi chiari', () => {
+    const s = S.emptyState();
+    const err = (i) => { try { P.createPerson(s, i, { today: TODAY }); return null; } catch (e) { return e.message; } };
+    assert.ok(/nome è obbligatorio/.test(err({ cognome: 'X' }))); assert.ok(/cognome è obbligatorio/.test(err({ nome: 'X' })));
+    assert.ok(/email non è valido/.test(err({ nome: 'A', cognome: 'B', email: 'xx' })));
+    assert.ok(/16 caratteri/.test(err({ nome: 'A', cognome: 'B', cf: 'ABC' })));
+    assert.ok(/nel futuro/.test(err({ nome: 'A', cognome: 'B', nascita: '2030-01-01' })));
+    assert.ok(/data di nascita non è valida/.test(err({ nome: 'A', cognome: 'B', nascita: '2026-02-31' })));
+    assert.ok(/precedente/.test(err({ nome: 'A', cognome: 'B', iscrizione: '2026-10-08', scadenza: '2026-10-01' })));
+    assert.ok(/Attivo o Sospeso/.test(err({ nome: 'A', cognome: 'B', stato: 'Boh' })));
+    assert.strictEqual(Object.keys(s.persons).length, 0);   // nulla è stato creato
+  });
+  t('manuale: duplicato (stesso CF o stesso nome+nascita) chiede conferma, anche col cestino', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi', { cf: 'RSSNNA90A41G482X', nascita: '1990-01-01' }));
+    let r = P.createPerson(s, { nome: 'A', cognome: 'B', cf: 'RSSNNA90A41G482X' }, { today: TODAY });
+    assert.strictEqual(r.duplicates.length, 1); assert.strictEqual(r.duplicates[0].motivo, 'stesso codice fiscale'); assert.strictEqual(Object.keys(s.persons).length, 1);
+    r = P.createPerson(s, { nome: 'anna', cognome: 'ROSSI', nascita: '1990-01-01' }, { today: TODAY });
+    assert.strictEqual(r.duplicates[0].motivo, 'stesso nome e data di nascita');
+    r = P.createPerson(s, { nome: 'anna', cognome: 'ROSSI', nascita: '1990-01-01' }, { today: TODAY, force: true });
+    assert.ok(r.personId);
+    P.deletePerson(s, '1');
+    assert.strictEqual(P.createPerson(s, { nome: 'Z', cognome: 'Z', cf: 'RSSNNA90A41G482X' }, { today: TODAY }).duplicates[0].nelCestino, true);
+  });
+  t('manuale: il primo caricamento del CSV resta "primo" anche dopo un inserimento a mano', () => {
+    const s = S.emptyState();
+    P.createPerson(s, { nome: 'Prima', cognome: 'Manuale' }, { today: TODAY });
+    const rep = S.importRecords(s, [rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi')], {});
+    assert.ok(rep.firstImport);
+    assert.strictEqual(Object.values(s.memberships).filter((m) => !m.printed).length, 1);   // solo quella manuale
+    assert.ok(s.memberships.M001_2026_10_08 === undefined);
+  });
+  t('modifica: i dati del CSV cambiati a mano non vengono sovrascritti dalla rilettura', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi', { email: 'vecchia@x.it' }));
+    const key = '1_2026-01-10';
+    const r = P.editPerson(s, '1', { nome: 'Anna', cognome: 'Rossi', nascita: '1990-01-01', provNascita: 'PE', cf: s.persons['1'].cf, email: 'NUOVA@x.it', cell: '', indirizzo: 'Via X 1', citta: 'Pescara', professione: 'Attrice', scadenza: '2027-03-01', stato: 'Sospeso' }, key, { today: TODAY });
+    assert.deepStrictEqual(r.changed.sort(), ['email', 'professione', 'scadenza', 'stato']);
+    assert.strictEqual(s.persons['1'].email, 'nuova@x.it'); assert.deepStrictEqual(s.persons['1'].overrides, { email: true });
+    const rep = S.importRecords(s, [rec('1', 'Anna', 'Rossi', { email: 'vecchia@x.it' })], {});
+    assert.strictEqual(s.persons['1'].email, 'nuova@x.it'); assert.strictEqual(s.memberships[key].scadenza, '2027-03-01'); assert.strictEqual(s.memberships[key].stato, 'Sospeso');
+    assert.strictEqual(rep.aggiornati, 0);
+  });
+  t('modifica: gli altri campi continuano ad aggiornarsi dal CSV; "ripristina" restituisce il CSV', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi', { email: 'vecchia@x.it' }));
+    P.editPerson(s, '1', { nome: 'Anna', cognome: 'Rossi', nascita: '1990-01-01', provNascita: 'PE', cf: s.persons['1'].cf, email: 'mia@x.it', cell: '', indirizzo: 'Via X 1', citta: 'Pescara', scadenza: '2027-01-09', stato: 'Attivo' }, '1_2026-01-10', { today: TODAY });
+    S.importRecords(s, [{ ...rec('1', 'Anna', 'Rossi', { email: 'csv@x.it' }), citta: 'Chieti' }], {});
+    assert.strictEqual(s.persons['1'].email, 'mia@x.it'); assert.strictEqual(s.persons['1'].citta, 'Chieti');
+    P.resetOverrides(s, '1');
+    S.importRecords(s, [{ ...rec('1', 'Anna', 'Rossi', { email: 'csv@x.it' }), citta: 'Chieti' }], {});
+    assert.strictEqual(s.persons['1'].email, 'csv@x.it');
+  });
+  t('modifica: un dato "strano" del CSV non blocca altre modifiche; scadenza prima dell\'iscrizione rifiutata', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi', { cf: 'CORTO' }));
+    const base = { nome: 'Anna', cognome: 'Rossi', nascita: '1990-01-01', provNascita: 'PE', cf: 'CORTO', email: 'anna@x.it', cell: '', indirizzo: 'Via X 1', citta: 'Pescara', scadenza: '2027-01-09', stato: 'Attivo' };
+    assert.ok(P.editPerson(s, '1', { ...base, professione: 'Cuoca' }, '1_2026-01-10', { today: TODAY }).changed.includes('professione'));
+    assert.throws(() => P.editPerson(s, '1', { ...base, scadenza: '2025-01-01' }, '1_2026-01-10', { today: TODAY }), /precedente/);
+    assert.throws(() => P.editPerson(s, '1', { ...base, cf: 'ALTRO' }, '1_2026-01-10', { today: TODAY }), /16 caratteri/);
+  });
+  t('modifica: l\'iscrizione di una tessera manuale cambia la chiave e il registro ricevute', () => {
+    const s = S.emptyState();
+    const { key } = P.createPerson(s, { nome: 'Eva', cognome: 'Blu', iscrizione: '2026-10-01' }, { today: TODAY });
+    S.commitPrint(s, [{ key, no: 7, label: '7', quota: '20', method: 'POS', date: '2026-10-01' }], 8);
+    const r = P.editPerson(s, 'M001', { nome: 'Eva', cognome: 'Blu', scadenza: '2027-09-30', stato: 'Attivo', iscrizione: '2026-09-15' }, key, { today: TODAY });
+    assert.strictEqual(r.key, 'M001_2026-09-15'); assert.ok(!s.memberships[key] && s.memberships['M001_2026-09-15']);
+    assert.strictEqual(s.receipts[0].key, 'M001_2026-09-15');
+    assert.strictEqual(s.memberships['M001_2026-09-15'].receiptNo, 7);
+  });
+  t('elimina: va nel cestino, la rilettura del CSV non lo fa tornare, "ripristina" lo rimette', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi'));
+    const rep0 = S.importRecords(s, [rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi')], {});
+    assert.strictEqual(rep0.nuovi, 0);
+    assert.strictEqual(P.deletePerson(s, '1').tessere, 1);
+    assert.ok(!s.persons['1'] && !s.memberships['1_2026-01-10'] && s.trash['1']);
+    const rep = S.importRecords(s, [rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi')], {});
+    assert.strictEqual(rep.ignorati, 1); assert.strictEqual(rep.nuovi, 0); assert.ok(!s.persons['1']);
+    assert.ok(rep.avvisi.some((a) => /cestino/.test(a)));
+    P.restorePerson(s, '1');
+    assert.ok(s.persons['1'] && s.memberships['1_2026-01-10'] && !s.trash['1']);
+    assert.throws(() => P.restorePerson(s, '1'), /Non è nel cestino/);
+  });
+  t('elimina: svuotare il cestino è definitivo (il CSV lo ricrea come nuovo)', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi'));
+    P.deletePerson(s, '1'); P.purgeTrash(s, '1');
+    assert.deepStrictEqual(s.trash, {});
+    const rep = S.importRecords(s, [rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi')], {});
+    assert.strictEqual(rep.nuovi, 1); assert.deepStrictEqual(rep.nuoviKeys, ['1_2026-01-10']);
+    P.deletePerson(s, '2'); P.purgeTrash(s);
+    assert.deepStrictEqual(s.trash, {});
+  });
+  t('elimina: la persona eliminata esce dagli avvisi email', () => {
+    const R = require('../core/reminders');
+    const s = withCsv(rec('1', 'Anna', 'Rossi', { scad: '2026-10-20' }));
+    assert.strictEqual(R.dueReminders(s, TODAY).groups.length, 1);
+    P.deletePerson(s, '1');
+    assert.strictEqual(R.dueReminders(s, TODAY).groups.length, 0);
+  });
+  t('ricevute: iscrizione annuale tiene numero e flag; retta mensile = numero nuovo, tessera intatta', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi'));
+    const key = '1_2026-01-10';
+    S.updateMemberships(s, [key], { printed: false });
+    S.commitPrint(s, [{ key, no: 10, label: 'A10', quota: '25', method: 'Contanti', date: '2026-10-08', tipo: 'annuale' }], 11);
+    assert.strictEqual(s.memberships[key].receiptNo, 10); assert.ok(s.memberships[key].printed);
+    S.commitPrint(s, [{ key, no: 10, label: 'A10', quota: '25', method: 'Contanti', date: '2026-10-09', tipo: 'annuale' }], NaN);    // ristampa
+    assert.strictEqual(s.receipts.filter((r) => r.tipo === 'annuale').length, 1);
+    S.commitPrint(s, [{ key, no: 11, label: 'A11', quota: '40', method: 'POS', date: '2026-10-08', tipo: 'mensile', periodo: '2026-10' }], 12);
+    S.commitPrint(s, [{ key, no: 12, label: 'A12', quota: '40', method: 'POS', date: '2026-11-08', tipo: 'mensile', periodo: '2026-11' }], 13);
+    assert.strictEqual(s.memberships[key].receiptNo, 10);        // la ricevuta della tessera non è stata toccata
+    assert.strictEqual(s.memberships[key].quota, '25');
+    assert.deepStrictEqual(s.receipts.filter((r) => r.tipo === 'mensile').map((r) => [r.no, r.periodo, r.nome]), [[11, '2026-10', 'Rossi Anna'], [12, '2026-11', 'Rossi Anna']]);
+    assert.strictEqual(s.settings.nextReceipt, 13);
+  });
+  t('ricevute: impostazioni tipo predefinito validate; archivio nuovo con cestino e registro', () => {
+    const s = S.emptyState();
+    assert.deepStrictEqual([s.trash, s.receipts, s.settings.defaultReceiptType], [{}, [], 'annuale']);
+    S.saveSettings(s, { ...s.settings, defaultReceiptType: 'mensile', defaultRetta: ' 40 ' });
+    assert.deepStrictEqual([s.settings.defaultReceiptType, s.settings.defaultRetta], ['mensile', '40']);
+    S.saveSettings(s, { ...s.settings, defaultReceiptType: 'settimanale' });
+    assert.strictEqual(s.settings.defaultReceiptType, 'annuale');
+  });
+  t('backup: nuove strutture valide passano; cestino/registro/modifiche corrotti rifiutati', () => {
+    const s = withCsv(rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi'));
+    P.editPerson(s, '1', { nome: 'Anna', cognome: 'Rossi', nascita: '1990-01-01', provNascita: 'PE', cf: s.persons['1'].cf, email: 'z@x.it', cell: '', indirizzo: 'Via X 1', citta: 'Pescara', scadenza: '2027-01-09', stato: 'Attivo' }, '1_2026-01-10', { today: TODAY });
+    P.deletePerson(s, '2');
+    S.commitPrint(s, [{ key: '1_2026-01-10', no: 3, label: '3', quota: '', method: '', date: '2026-10-08', tipo: 'mensile', periodo: '2026-10' }], 4);
+    const bk = B.makeBackup(s, '1.4.0');
+    assert.ok(B.verifyBackup(JSON.parse(JSON.stringify(bk))).ok);
+    const bad = (fn) => { const x = JSON.parse(JSON.stringify(bk)); fn(x.data); x.sha256 = B.sha256(JSON.stringify(x.data)); return B.verifyBackup(x); };
+    assert.ok(!bad((d) => { d.trash['2'].person.id = '9'; }).ok);
+    assert.ok(!bad((d) => { d.trash['1'] = d.trash['2']; d.trash['1'].person = { ...d.trash['2'].person, id: '1' }; }).ok);   // anche attivo
+    assert.ok(!bad((d) => { d.receipts[0].periodo = '2026-13'; }).ok);
+    assert.ok(!bad((d) => { d.receipts[0].no = 'x'; }).ok);
+    assert.ok(!bad((d) => { d.persons['1'].overrides = 5; }).ok);
+    const old = JSON.parse(JSON.stringify(bk)); delete old.data.trash; delete old.data.receipts; old.sha256 = B.sha256(JSON.stringify(old.data));
+    assert.ok(B.verifyBackup(old).ok);
+  });
+}
+
 // ---- Ricerca del CSV nella cartella Download ----
 {
   const os = require('os');

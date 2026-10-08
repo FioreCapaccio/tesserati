@@ -11,7 +11,7 @@ module.exports = ({ win, state, saveState, S, app }) => {
   fs.mkdirSync(out, { recursive: true });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const js = (code) => win.webContents.executeJavaScript(code);
-  const shot = async (name) => { await wait(350); fs.writeFileSync(path.join(out, name + '.png'), (await win.webContents.capturePage()).toPNG()); console.log('shot', name); };
+  const shot = async (name) => { await wait(900); fs.writeFileSync(path.join(out, name + '.png'), (await win.webContents.capturePage()).toPNG()); console.log('shot', name); };
   const log = (...a) => console.log('[smoke]', ...a);
 
   win.webContents.once('did-finish-load', async () => {
@@ -77,6 +77,62 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await shot('05-calendario-mese');
       await js(`document.querySelector('[data-cal=anno]').click()`);
       await shot('06-calendario-anno');
+      // ---- inserimento / modifica / eliminazione manuale ----
+      const setv = (id, val) => js(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(val)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await js(`document.querySelector('[data-nav=lista]').click()`);
+      await js(`document.querySelector('[data-act=new-person]').click()`); await wait(400);
+      await shot('18-nuovo-tesserato');
+      await js(`document.querySelector('[data-act=save-person]').click()`); await wait(300);
+      log('invio modulo vuoto -> errore =', await js(`document.getElementById('pf-err').textContent`));
+      for (const [id, v] of [['pf-cognome', 'bianchi'], ['pf-nome', 'giulia maria'], ['pf-nascita', '1991-04-12'], ['pf-prov', 'pe'], ['pf-cf', 'bnchgl91d52g482x'], ['pf-email', 'giulia@esempio.it'], ['pf-cell', '333 987 6543'], ['pf-indirizzo', 'Via Roma 5'], ['pf-citta', 'pescara'], ['pf-prof', 'Attrice'], ['pf-isc', '2026-10-08']]) await setv(id, v);
+      log('scadenza proposta dopo l iscrizione =', await js(`document.getElementById('pf-sca').value`));
+      await js(`document.querySelector('[data-act=save-person]').click()`); await wait(800);
+      const man = Object.values(st.persons).find((p) => p.manual);
+      log('creato =', man && `${man.id} ${man.cognome} ${man.nome} ${man.cf} ${man.cell} ${man.citta}`, '| tessere =', Object.values(st.memberships).filter((m) => m.personId === (man && man.id)).length, '| scheda aperta =', await js(`document.querySelector('#drawer h2')?.textContent`));
+      await shot('19-tesserato-creato');
+      await js(`document.querySelector('[data-act=new-person]').click()`); await wait(300);
+      await setv('pf-cognome', 'Bianchi'); await setv('pf-nome', 'Giulia'); await setv('pf-cf', 'BNCHGL91D52G482X');
+      await js(`document.querySelector('[data-act=save-person]').click()`); await wait(500);
+      log('doppione -> avviso =', (await js(`document.getElementById('pf-err').textContent`)).slice(0, 90), '| pulsante =', await js(`document.querySelector('[data-act=save-person]').textContent`));
+      await shot('20-doppione');
+      await js(`closeModal()`);
+      // modifica di un tesserato del CSV
+      const csvKey = Object.values(st.memberships).find((m) => !m.manual && m.personId === '1472513').key;
+      await js(`document.querySelector('tr[data-key="${csvKey}"]').click()`); await wait(300);
+      await js(`document.querySelector('[data-act=edit-person]').click()`); await wait(300);
+      log('iscrizione CSV bloccata =', await js(`document.getElementById('pf-isc').disabled`));
+      await setv('pf-email', 'Nuova.Email@Esempio.it'); await setv('pf-citta', 'Chieti');
+      await js(`document.querySelector('[data-act=save-person]').click()`); await wait(800);
+      const pe = st.persons['1472513'];
+      log('modifica salvata =', pe.email, pe.citta, JSON.stringify(pe.overrides));
+      S.importRecords(st, records, { file: 'Younity.csv' }); saveState();
+      log('dopo rilettura del CSV: email =', pe.email, '| città =', pe.citta, '(la modifica resta)');
+      await js(`window.api.getState().then(r=>{setData(r);render()})`); await wait(300);
+      await shot('21-scheda-modificata');
+      // ricevuta: retta mensile
+      await js(`document.querySelector('[data-act=print-one]').click()`); await wait(700);
+      await js(`(()=>{const t=document.getElementById('p-tipo');t.value='mensile';t.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await setv('p-quota', '40'); await setv('p-periodo', '2026-10'); await wait(800);
+      const rp = await js(`openPrintDialog.current.receipts[0]`);
+      const rh = await js(`openPrintDialog.current.html`);
+      log('ricevuta retta: tipo/periodo/quota =', rp.tipo, rp.periodo, rp.quota, '| nel testo: titolo =', rh.includes('Ricevuta retta mensile'), '| causale =', rh.includes('Retta mensile – ottobre 2026'), '| "Retta versata" =', rh.includes('Retta versata'));
+      await shot('22-stampa-retta-mensile');
+      await js(`closeModal()`);
+      // eliminazione e cestino
+      await js(`document.querySelector('[data-act=delete-person]').click()`); await wait(300);
+      await shot('23-conferma-eliminazione');
+      await js(`document.querySelector('[data-act=delete-go]').click()`); await wait(800);
+      log('eliminato -> nel cestino =', !!st.trash['1472513'], '| attivo =', !!st.persons['1472513'], '| tessere rimaste =', Object.values(st.memberships).filter((m) => m.personId === '1472513').length);
+      const rep2 = S.importRecords(st, records, { file: 'Younity.csv' });
+      log('rilettura CSV: ignorati =', rep2.ignorati, '| tornato attivo =', !!st.persons['1472513'], '| nuovi =', rep2.nuovi);
+      await js(`document.querySelector('[data-nav=impostazioni]').click()`); await wait(300);
+      win.setSize(1440, 2900); await wait(500);
+      await js(`document.querySelector('[data-act=trash-restore]').scrollIntoView()`);
+      await shot('24-cestino');
+      win.setSize(1440, 900); await wait(300);
+      await js(`document.querySelector('[data-act=trash-restore]').click()`); await wait(600);
+      log('ripristinato =', !!st.persons['1472513'] && !st.trash['1472513'], '| tessere =', Object.values(st.memberships).filter((m) => m.personId === '1472513').length);
+
       // ---- avvisi email (trasporto finto: nessuna rete) ----
       st.settings.mail.user = 'associazione@gmail.com'; st.settings.mail.fromName = 'Il Sipario'; saveState();
       await js(`window.api.getState().then(r=>{setData(r);render()})`);

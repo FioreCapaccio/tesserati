@@ -45,6 +45,21 @@ function checkStructure(data) {
     if (typeof r !== 'object' || (r.pre && (typeof r.pre.sentAt !== 'string' || isNaN(new Date(r.pre.sentAt))))) add(`Tessera ${key}: dati dell'avviso email non validi.`);
   }
   if (data.mailLog != null && !Array.isArray(data.mailLog)) add('Registro degli invii email non valido.');
+  if (data.trash != null) {
+    if (typeof data.trash !== 'object' || Array.isArray(data.trash)) add('Cestino non valido.');
+    else for (const [id, t] of Object.entries(data.trash)) {
+      if (!t || !t.person || t.person.id !== id || !Array.isArray(t.memberships)) add(`Cestino ${id}: voce non valida.`);
+      else if (data.persons[id]) add(`Cestino ${id}: il tesserato esiste anche tra quelli attivi.`);
+    }
+  }
+  if (data.receipts != null) {
+    if (!Array.isArray(data.receipts)) add('Registro delle ricevute non valido.');
+    else data.receipts.forEach((r, i) => {
+      if (!r || !Number.isInteger(r.no) || !['annuale', 'mensile'].includes(r.tipo)) add(`Registro ricevute, voce ${i + 1}: non valida.`);
+      else if (r.tipo === 'mensile' && r.periodo && !/^\d{4}-(0[1-9]|1[0-2])$/.test(r.periodo)) add(`Registro ricevute, voce ${i + 1}: mese non valido.`);
+    });
+  }
+  for (const [id, p] of Object.entries(data.persons)) if (p && p.overrides != null && (typeof p.overrides !== 'object' || Array.isArray(p.overrides))) add(`Anagrafica ${id}: modifiche manuali non valide.`);
   const s = data.settings;
   if (s && s.nextReceipt != null && !(Number.isInteger(Number(s.nextReceipt)) && Number(s.nextReceipt) >= 1)) add('Il prossimo numero di ricevuta non è valido.');
   return errors;
