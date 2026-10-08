@@ -7,6 +7,7 @@ const { readMembers, newestMatching } = require('./core/csv');
 const S = require('./core/store');
 const B = require('./core/backup');
 const R = require('./core/reminders');
+const P = require('./core/people');
 const M = require('./core/mailer');
 
 const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
@@ -254,6 +255,19 @@ handle('archive:change', async ({ reset }) => {
   startupWarning = '';
   return { moved: true, useExisting, from: oldFile, ...snapshot() };
 });
+
+// ---------- Inserimento, modifica ed eliminazione manuale ----------
+handle('person:create', ({ data, force }) => {
+  const r = P.createPerson(state, data, { force: !!force });
+  if (r.duplicates) return { duplicates: r.duplicates };
+  saveState();
+  return { created: r, ...snapshot() };
+});
+handle('person:edit', ({ personId, key, data }) => { const r = P.editPerson(state, personId, data, key); saveState(); return { ...r, ...snapshot() }; });
+handle('person:delete', (id) => { const r = P.deletePerson(state, id); saveState(); return { ...r, ...snapshot() }; });
+handle('person:restore', (id) => { P.restorePerson(state, id); saveState(); return snapshot(); });
+handle('person:purge', (id) => { P.purgeTrash(state, id || null); saveState(); return snapshot(); });
+handle('person:reset-overrides', (id) => { P.resetOverrides(state, id); saveState(); return snapshot(); });
 
 handle('membership:update', ({ keys, patch }) => { S.updateMemberships(state, keys, patch); saveState(); return snapshot(); });
 handle('person:update', ({ id, patch }) => { S.updatePerson(state, id, patch); saveState(); return snapshot(); });

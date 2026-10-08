@@ -213,8 +213,6 @@ ul.warns { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 
 .rowlist-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
 .rowlist-head b { color: var(--ink); }
 .rowlist { display: flex; flex-direction: column; gap: 6px; }
-.prow { display: grid; grid-template-columns: minmax(0, 1fr) 68px 104px; gap: 6px; align-items: center; }
-.prow .pn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ink); }
 .prow .field { padding: 5px 7px; font-size: 13px; }
 .print-grid .ctl label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
 .print-grid .ctl .field { color: var(--ink); font-size: 14px; }
@@ -247,3 +245,18 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .btn-quit { background: transparent; color: inherit; border: 1px solid rgba(255,255,255,.28); border-radius: 10px; padding: 8px 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; opacity: .9; }
 .btn-quit:hover { background: rgba(255,255,255,.12); opacity: 1; }
 .btn-quit svg { width: 16px; height: 16px; }
+
+.modal.wide { width: min(740px, 100%); }
+.pf-sep { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.form-error { margin-top: 12px; background: var(--red-bg); color: var(--red-tx); border: 1px solid var(--red-bd); border-radius: 10px; padding: 10px 12px; }
+.btn.danger-solid { background: var(--red-bd); border-color: var(--red-bd); color: #fff; }
+.btn.danger-solid:hover { filter: brightness(.92); background: var(--red-bd); }
+.prow { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.prow .pn { font-weight: 600; }
+.prow .pc { display: grid; grid-template-columns: 62px 1fr 1fr; gap: 6px; }
+.issued { display: flex; flex-direction: column; gap: 6px; }
+.iss { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 7px 10px; background: var(--surface-2); border-radius: 9px; }
+.iss small { grid-column: 1 / -1; color: var(--muted); }
+.trashlist { display: flex; flex-direction: column; gap: 8px; }
+.trashlist .tr { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 12px; background: var(--surface-2); border-radius: 10px; flex-wrap: wrap; }
+.form > .wide { grid-column: 1 / -1; }

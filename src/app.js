@@ -9,6 +9,7 @@ const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${pad(
 const isoToDate = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
 const daysFrom = (iso) => Math.round((isoToDate(iso) - isoToDate(todayIso())) / 864e5);
 const fmt = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
+const FIELD_NAMES = { nome: 'nome', cognome: 'cognome', nascita: 'data di nascita', provNascita: 'provincia di nascita', cf: 'codice fiscale', email: 'email', cell: 'cellulare', indirizzo: 'indirizzo', citta: 'città', scadenza: 'scadenza', stato: 'stato' };
 const MONTHS = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 const DOW = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -18,6 +19,9 @@ const ICON = {
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>',
   power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>',
   mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15-6.7L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15 6.7L21 16"/><path d="M16 16h5v5"/></svg>',
@@ -131,7 +135,8 @@ function welcome() {
     <p>Per iniziare carica il file CSV esportato da Younity.<br>Le tessere presenti ora verranno segnate come già stampate: da quel momento, a ogni lettura, risulteranno “da stampare” solo i nuovi tesserati.</p>
     <p>Il file viene cercato nella cartella <b>Download</b> (<span class="path">${esc(App.csv ? App.csv.folder : '')}</span>).</p>
     <button class="btn primary" data-act="reload">${ICON.sync} Leggi il file</button>
-    <button class="btn" data-act="pick-import">Scegli un altro file…</button></div>`;
+    <button class="btn" data-act="pick-import">Scegli un altro file…</button>
+    <button class="btn" data-act="new-person">${ICON.plus} Inserisci un tesserato a mano</button></div>`;
 }
 
 // ======================= Elenco =======================
@@ -146,6 +151,7 @@ function listView() {
         <h1>${todoMode ? 'Da stampare' : 'Tesserati'}</h1>
         <p>${todoMode ? (todo.length ? `${todo.length} ricevute in attesa di stampa` : 'Tutto stampato: nessuna ricevuta in attesa.') : 'Archivio completo, con scheda e ricevuta per ogni tessera.'}</p>
       </div>
+      ${!todoMode ? `<button class="btn primary" data-act="new-person">${ICON.plus} Nuovo tesserato</button>` : ''}
       ${todoMode && todo.length ? `<div style="display:flex;gap:8px"><button class="btn" data-act="mark-all-printed">Segna tutte come stampate</button><button class="btn primary" data-act="print-all-todo">${ICON.print} Stampa tutte (${todo.length})</button></div>` : ''}
     </div>
     <div class="toolbar">
@@ -186,7 +192,7 @@ function filteredRows() {
     });
   }
   const k = App.sort.key, dir = App.sort.dir;
-  const val = (r) => ({ cognome: (r.p.cognome + ' ' + r.p.nome).toLowerCase(), id: Number(r.p.id), nascita: r.p.nascita, citta: (r.p.citta || '').toLowerCase(), iscrizione: r.m.iscrizione, scadenza: r.m.scadenza, stato: r.m.stato, ricevuta: r.m.printed ? (r.m.receiptNo || 0) : -1 })[k];
+  const val = (r) => ({ cognome: (r.p.cognome + ' ' + r.p.nome).toLowerCase(), id: Number.isNaN(Number(r.p.id)) ? Number.MAX_SAFE_INTEGER : Number(r.p.id), nascita: r.p.nascita, citta: (r.p.citta || '').toLowerCase(), iscrizione: r.m.iscrizione, scadenza: r.m.scadenza, stato: r.m.stato, ricevuta: r.m.printed ? (r.m.receiptNo || 0) : -1 })[k];
   rows.sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : byName(a, b)) * dir; });
   return rows;
 }
@@ -201,7 +207,7 @@ function renderTable() {
     const minor = age(p.nascita) != null && age(p.nascita) < 18;
     return `<tr data-key="${esc(m.key)}" class="${App.detailKey === m.key ? 'active' : ''}">
       <td class="cbx"><input type="checkbox" data-sel="${esc(m.key)}" ${App.sel.has(m.key) ? 'checked' : ''} aria-label="Seleziona ${esc(p.cognome)} ${esc(p.nome)}"></td>
-      <td class="name">${esc(p.cognome)} ${esc(p.nome)}${minor ? ' <span class="badge neutral">minorenne</span>' : ''}<small>${esc(p.email)}</small></td>
+      <td class="name">${esc(p.cognome)} ${esc(p.nome)}${minor ? ' <span class="badge neutral">minorenne</span>' : ''}${p.manual ? ' <span class="badge neutral">manuale</span>' : ''}<small>${esc(p.email)}</small></td>
       <td class="num opt">${esc(p.id)}</td>
       <td class="opt">${fmt(p.nascita)}</td>
       <td class="opt">${esc(p.citta) || '<span style="color:var(--muted)">—</span>'}</td>
@@ -244,6 +250,11 @@ function renderDrawer() {
   const st = statusOf(m);
   const a = age(p.nascita);
   const hist = Object.values(App.data.memberships).filter((x) => x.personId === m.personId).sort((x, y) => y.iscrizione.localeCompare(x.iscrizione));
+  const edited = [...Object.keys(p.overrides || {}), ...Object.keys(m.overrides || {})];
+  const led = (App.data.receipts || []).filter((r) => r.personId === p.id);
+  const legacy = hist.filter((h) => h.receiptNo && !led.some((r) => r.tipo === 'annuale' && r.key === h.key && r.no === h.receiptNo))
+    .map((h) => ({ tipo: 'annuale', no: h.receiptNo, label: h.receiptLabel || String(h.receiptNo), date: h.receiptDate || '', quota: h.quota, method: h.paymentMethod }));
+  const issued = [...led, ...legacy].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.no - a.no);
   const keep = dr.scrollTop;
   dr.hidden = false;
   dr.innerHTML = `
@@ -256,13 +267,17 @@ function renderDrawer() {
         ${a != null && a < 18 ? '<span class="badge neutral">Minorenne</span>' : ''}
         ${m.printed ? `<span class="badge neutral">✓ Ricevuta${m.receiptNo ? ' n° ' + esc(m.receiptLabel || m.receiptNo) : ''}</span>` : '<span class="badge todo">Da stampare</span>'}
         ${m.hidden ? '<span class="badge neutral">Nascosta dal calendario</span>' : ''}
+        ${p.manual ? '<span class="badge neutral">Inserito a mano</span>' : ''}
+        ${edited.length ? '<span class="badge neutral">✎ Modificato a mano</span>' : ''}
       </div>
     </div>
     <div class="d-body">
       <div class="d-sec"><h3>Azioni</h3><div class="d-actions">
         <button class="btn primary" data-act="print-one">${ICON.print} ${m.printed ? 'Ristampa ricevuta' : 'Stampa ricevuta'}</button>
         <button class="btn" data-act="flag-one" data-v="${m.printed ? 0 : 1}">${m.printed ? 'Segna da stampare' : 'Segna come stampata'}</button>
+        <button class="btn" data-act="edit-person">${ICON.pen} Modifica dati</button>
         <button class="btn ${m.hidden ? '' : 'danger'}" data-act="toggle-hidden">${m.hidden ? ICON.eye + ' Rimetti nel calendario' : ICON.eyeoff + ' Rimuovi dal calendario'}</button>
+        <button class="btn danger" data-act="delete-person">${ICON.trash} Elimina tesserato</button>
       </div></div>
       <div class="d-sec"><h3>Anagrafica</h3><dl class="kv">
         <dt>ID tessera</dt><dd>${esc(p.id)}</dd>
@@ -292,6 +307,10 @@ function renderDrawer() {
       <div class="d-sec"><h3>Storico tessere (${hist.length})</h3><div class="hist">
         ${hist.map((h) => `<button data-open="${esc(h.key)}" class="${h.key === m.key ? 'on' : ''}"><span class="dot ${statusOf(h)}"></span><span class="when">${fmt(h.iscrizione)} → ${fmt(h.scadenza)}</span>${h.printed ? '<span class="badge neutral">✓</span>' : '<span class="badge todo">Da stampare</span>'}</button>`).join('')}
       </div></div>
+      ${issued.length ? `<div class="d-sec"><h3>Ricevute emesse (${issued.length})</h3><div class="issued">
+        ${issued.map((r) => `<div class="iss"><b>N° ${esc(r.label || r.no)}</b><span>${esc(Receipt.causale(r.tipo, r.periodo))}</span><small>${r.date ? fmt(r.date) : ''}${Receipt.formatQuota(r.quota) ? ' · ' + esc(Receipt.formatQuota(r.quota)) : ''}${r.method ? ' · ' + esc(r.method) : ''}</small></div>`).join('')}</div></div>` : ''}
+      ${edited.length ? `<div class="d-sec"><h3>Modificato a mano</h3><p style="margin:0 0 8px;color:var(--muted)">Questi dati arrivavano da Younity e restano come li hai scritti anche dopo “Rileggi file”: <b>${[...new Set(edited)].map((f) => FIELD_NAMES[f] || f).join(', ')}</b>.</p>
+        <button class="btn sm" data-act="reset-overrides">Torna ai dati del CSV alla prossima lettura</button></div>` : ''}
       <div class="d-sec"><h3>Note</h3><textarea class="field" id="note" placeholder="Annotazioni sul tesserato…">${esc(p.note)}</textarea></div>
     </div>`;
   dr.scrollTop = keep;
@@ -464,6 +483,15 @@ async function doSendAvvisi() {
 }
 
 // ======================= Impostazioni =======================
+function trashBlock() {
+  const t = Object.values(App.data.trash || {}).sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+  if (!t.length) return '<p>Qui finiscono i tesserati eliminati. Per ora è vuoto.</p>';
+  return `<p>I tesserati eliminati non tornano con la lettura del CSV. Da qui puoi ripristinarli o cancellarli per sempre.</p>
+    <div class="trashlist">${t.map((x) => `<div class="tr"><span><b>${esc(x.person.cognome)} ${esc(x.person.nome)}</b> <small style="color:var(--muted)">ID ${esc(x.person.id)} · ${x.memberships.length} tessere · eliminato il ${new Date(x.deletedAt).toLocaleDateString('it-IT')}</small></span>
+      <span><button class="btn sm" data-act="trash-restore" data-id="${esc(x.person.id)}">Ripristina</button> <button class="btn sm danger" data-act="trash-purge" data-id="${esc(x.person.id)}">Elimina per sempre</button></span></div>`).join('')}</div>
+    <div style="margin-top:12px"><button class="btn sm danger" data-act="trash-empty">Svuota il cestino (${t.length})</button></div>`;
+}
+
 function csvBlock() {
   const c = App.csv;
   if (!c) return '';
@@ -500,6 +528,8 @@ function settingsView() {
           ${inp('s-digits', 'Cifre del numero (zeri iniziali)', s.receiptDigits, 'type="number" min="1" max="10"')}
           ${inp('s-quota', 'Quota predefinita € (vuoto = da scrivere a mano)', s.defaultQuota, 'inputmode="decimal"')}
           <label>Metodo di pagamento predefinito<select class="field" id="s-pay">${payOptions(s.defaultPayment, 'Da segnare a mano sulla ricevuta')}</select></label>
+          <label>Tipo di ricevuta predefinito<select class="field" id="s-rtype">${[['annuale', 'Quota di iscrizione annuale'], ['mensile', 'Retta mensile']].map(([v, l]) => `<option value="${v}" ${s.defaultReceiptType === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${inp('s-retta', 'Retta mensile predefinita € (vuoto = a mano)', s.defaultRetta, 'inputmode="decimal"')}
         </div>
         <p class="path" style="margin:10px 0 0">Anteprima numero: <b id="numprev">${esc(s.receiptPrefix + String(s.nextReceipt).padStart(s.receiptDigits, '0'))}</b></p></section>
       <section class="card"><h2>Calendario</h2><p>Soglie dei colori rispetto alla data di oggi: rosso se scaduta, arancione e giallo in base ai giorni mancanti, verde oltre.</p>
@@ -556,6 +586,7 @@ function settingsView() {
         <p>La copia contiene tutti i dati e le impostazioni (logo compreso) ed è protetta da una firma di integrità. Al ripristino l'app verifica firma e coerenza dei dati prima di toccare qualcosa, e salva a parte una copia dei dati attuali.</p>
         <div class="d-actions"><button class="btn primary" data-act="export-backup">Backup: salva copia…</button>
           <button class="btn" data-act="import-backup">Ripristina da copia…</button></div></section>
+      <section class="card"><h2>Cestino</h2>${trashBlock()}</section>
       <section class="card"><h2>Informazioni</h2>
         <dl class="kv"><dt>Programma</dt><dd>Tesserati</dd><dt>Versione</dt><dd>${esc(App.version || '')}</dd><dt>Copyright</dt><dd>${esc(App.copyright || '')}</dd></dl></section>
     </div>`;
@@ -566,7 +597,7 @@ function readSettingsForm() {
   const cur = S();
   return Object.assign({}, cur, {
     assoc: Object.assign({}, cur.assoc, { nome: v('s-nome'), indirizzo: v('s-indirizzo'), cf: v('s-cf'), telefono: v('s-telefono'), email: v('s-email'), nota: v('s-nota') }),
-    nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'), defaultPayment: v('s-pay'),
+    nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'), defaultPayment: v('s-pay'), defaultReceiptType: v('s-rtype'), defaultRetta: v('s-retta'),
     soonDays: v('s-soon'), warnDays: v('s-warn'),
     mail: Object.assign({}, cur.mail, { provider: v('m-provider'), user: v('m-user'), fromName: v('m-from'), replyTo: v('m-reply'), host: v('m-host'), port: v('m-port'), secure: $('#m-secure').checked, daysBefore: v('m-days'), subject: v('m-subject'), body: v('m-body') }),
   });
@@ -600,6 +631,9 @@ function showImportReport(res) {
 
 const PAY = ['Contanti', 'POS', 'Bonifico'];
 const payOptions = (val, blank) => [['', blank], ...PAY.map((x) => [x, x])].map(([v, l]) => `<option value="${v}" ${v === (val || '') ? 'selected' : ''}>${l}</option>`).join('');
+const TIPI = [['annuale', 'Iscrizione annuale'], ['mensile', 'Retta mensile']];
+const tipoOptions = (val, short) => TIPI.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${short ? (v === 'annuale' ? 'Annuale' : 'Mensile') : l}</option>`).join('');
+const thisMonth = () => todayIso().slice(0, 7);
 
 function openPrintDialog(keys) {
   const { rows } = derive();
@@ -607,50 +641,64 @@ function openPrintDialog(keys) {
   const items = keys.map((k) => map.get(k)).filter(Boolean).sort(byName);
   if (!items.length) return;
   const s = S();
-  const existing = items.filter((r) => r.m.receiptNo).length;
+  const defQuotaFor = (t) => (t === 'mensile' ? s.defaultRetta : s.defaultQuota);
   const pages = Math.ceil(items.length / 4);
-  // Valori per singola ricevuta: partono da quelli salvati sulla tessera, altrimenti dai predefiniti.
+  // Valori per singola ricevuta: partono da quelli salvati sulla tessera (solo per l'iscrizione annuale), altrimenti dai predefiniti.
   const row = {};
-  items.forEach((r) => { row[r.m.key] = { quota: r.m.quota || s.defaultQuota, method: r.m.paymentMethod || s.defaultPayment, qT: !!r.m.quota, mT: !!r.m.paymentMethod }; });
+  items.forEach((r) => {
+    const t = s.defaultReceiptType;
+    const own = t === 'annuale';
+    row[r.m.key] = { tipo: t, quota: (own && r.m.quota) || defQuotaFor(t), method: (own && r.m.paymentMethod) || s.defaultPayment, qT: own && !!r.m.quota, mT: own && !!r.m.paymentMethod, tT: false };
+  });
+  const touched = { quota: false };
   openModal(`<div class="modal big" role="dialog" aria-modal="true" aria-labelledby="mt">
     <header><h2 id="mt">Stampa ricevute</h2></header>
     <div class="mbody"><div class="print-grid">
       <div class="ctl">
         <div><b>${items.length}</b> ricevut${items.length === 1 ? 'a' : 'e'} · <b>${pages}</b> foglio${pages === 1 ? '' : 'i'} A4 (4 per foglio)</div>
-        <label>Data della ricevuta<input class="field" type="date" id="p-date" value="${todayIso()}"></label>
-        <label>Primo numero progressivo<input class="field" type="number" min="1" id="p-start" value="${s.nextReceipt}"></label>
         <div class="two">
-          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(s.defaultQuota)}" inputmode="decimal" placeholder="a mano"></label>
+          <label>Data della ricevuta<input class="field" type="date" id="p-date" value="${todayIso()}"></label>
+          <label>Primo numero<input class="field" type="number" min="1" id="p-start" value="${s.nextReceipt}"></label>
+        </div>
+        <label>Tipo di ricevuta<select class="field" id="p-tipo">${tipoOptions(s.defaultReceiptType)}</select></label>
+        <label id="p-per" ${s.defaultReceiptType === 'mensile' ? '' : 'hidden'}>Mese della retta<input class="field" type="month" id="p-periodo" value="${thisMonth()}"></label>
+        <div class="two">
+          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(defQuotaFor(s.defaultReceiptType))}" inputmode="decimal" placeholder="a mano"></label>
           <label>Pagamento predefinito<select class="field" id="p-method">${payOptions(s.defaultPayment, 'Da segnare a mano')}</select></label>
         </div>
-        <div class="hint">${existing ? `${existing} ${existing === 1 ? 'ricevuta ha' : 'ricevute hanno'} già un numero e lo mantiene${existing === items.length ? '' : '; le altre proseguono dal numero indicato'}. ` : ''}Se quota o pagamento restano vuoti, sulla ricevuta c’è lo spazio da compilare a mano.</div>
+        <div class="hint">Iscrizione annuale: una ristampa tiene il numero già assegnato. Retta mensile: ogni stampa è un pagamento nuovo e prende un numero nuovo; la tessera non cambia. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
         <div class="hint" id="p-range"></div>
         ${s.assoc.nome ? '' : '<div class="hint" style="color:var(--org-tx);background:var(--org-bg);padding:8px 10px;border-radius:8px">Mancano i dati dell’associazione: inseriscili in Impostazioni per averli sulla ricevuta.</div>'}
-        <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento</span></div>
+        <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento · tipo</span></div>
         <div class="rowlist" id="p-rows">${items.map((r) => `<div class="prow"><span class="pn" title="${esc(r.p.cognome + ' ' + r.p.nome)}">${esc(r.p.cognome)} ${esc(r.p.nome)}</span>
-          <input class="field" data-rq="${esc(r.m.key)}" value="${esc(row[r.m.key].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(r.p.cognome)}">
-          <select class="field" data-rm="${esc(r.m.key)}" aria-label="Pagamento ${esc(r.p.cognome)}">${payOptions(row[r.m.key].method, '—')}</select></div>`).join('')}</div>
+          <div class="pc"><input class="field" data-rq="${esc(r.m.key)}" value="${esc(row[r.m.key].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(r.p.cognome)}">
+          <select class="field" data-rm="${esc(r.m.key)}" aria-label="Pagamento ${esc(r.p.cognome)}">${payOptions(row[r.m.key].method, '—')}</select>
+          <select class="field" data-rt="${esc(r.m.key)}" aria-label="Tipo ${esc(r.p.cognome)}">${tipoOptions(row[r.m.key].tipo, true)}</select></div></div>`).join('')}</div>
       </div>
       <div class="preview" id="pv"></div>
     </div></div>
-    <footer><span class="note">Dopo la stampa le tessere risultano “stampate” e il progressivo avanza.</span>
+    <footer><span class="note">Dopo la stampa la tessera risulta “stampata” (solo per l’iscrizione annuale) e il progressivo avanza.</span>
       <button class="btn" data-act="close-modal">Annulla</button>
       <button class="btn" data-act="do-print" data-mode="pdf">Salva PDF…</button>
       <button class="btn primary" data-act="do-print" data-mode="print">${ICON.print} Stampa</button></footer></div>`, () => {
     const build = () => {
       const date = $('#p-date').value || todayIso();
+      const periodo = $('#p-periodo').value || thisMonth();
       let n = Math.max(1, parseInt($('#p-start').value, 10) || 1);
       const out = [];
       const receipts = [];
       let lastNew = null;
       for (const r of items) {
-        let no = r.m.receiptNo;
-        let label = r.m.receiptLabel;
+        const st = row[r.m.key];
+        const reuse = st.tipo === 'annuale' && r.m.receiptNo;      // ristampa dell'iscrizione: stesso numero
+        let no = reuse ? r.m.receiptNo : null;
+        let label = reuse ? r.m.receiptLabel : '';
         if (!no) { no = n++; label = s.receiptPrefix + String(no).padStart(s.receiptDigits, '0'); lastNew = no; }
-        const { quota, method } = row[r.m.key];
-        out.push({ p: r.p, m: r.m, label: label || String(no), quota: quota.trim(), method, date });
-        receipts.push({ key: r.m.key, no, label: label || String(no), quota: quota.trim(), method, date });
+        const per = st.tipo === 'mensile' ? periodo : '';
+        out.push({ p: r.p, m: r.m, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
+        receipts.push({ key: r.m.key, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
       }
+      $('#p-per').hidden = !receipts.some((r) => r.tipo === 'mensile');
       const nums = receipts.map((x) => x.no);
       $('#p-range').textContent = `Numeri: dal ${s.receiptPrefix}${String(Math.min(...nums)).padStart(s.receiptDigits, '0')} al ${s.receiptPrefix}${String(Math.max(...nums)).padStart(s.receiptDigits, '0')}.`;
       const html = Receipt.build(out, s.assoc);
@@ -663,9 +711,10 @@ function openPrintDialog(keys) {
     };
     let t;
     const later = () => { clearTimeout(t); t = setTimeout(build, 200); };
-    for (const id of ['p-date', 'p-start']) $('#' + id).addEventListener('input', later);
+    for (const id of ['p-date', 'p-start', 'p-periodo']) $('#' + id).addEventListener('input', later);
     // I predefiniti si propagano alle righe non modificate a mano.
     $('#p-quota').addEventListener('input', (e) => {
+      touched.quota = true;
       document.querySelectorAll('[data-rq]').forEach((i) => { const st = row[i.dataset.rq]; if (!st.qT) { st.quota = e.target.value; i.value = e.target.value; } });
       later();
     });
@@ -673,10 +722,114 @@ function openPrintDialog(keys) {
       document.querySelectorAll('[data-rm]').forEach((i) => { const st = row[i.dataset.rm]; if (!st.mT) { st.method = e.target.value; i.value = e.target.value; } });
       later();
     });
+    $('#p-tipo').addEventListener('change', (e) => {
+      const tipo = e.target.value;
+      if (!touched.quota) $('#p-quota').value = defQuotaFor(tipo);
+      document.querySelectorAll('[data-rt]').forEach((i) => {
+        const st = row[i.dataset.rt];
+        if (st.tT) return;
+        st.tipo = tipo; i.value = tipo;
+        const q = document.querySelector(`[data-rq="${CSS.escape(i.dataset.rt)}"]`);
+        if (!st.qT) { st.quota = $('#p-quota').value; q.value = st.quota; }
+      });
+      later();
+    });
     $('#p-rows').addEventListener('input', (e) => { const k = e.target.dataset.rq; if (k) { row[k].quota = e.target.value; row[k].qT = true; later(); } });
-    $('#p-rows').addEventListener('change', (e) => { const k = e.target.dataset.rm; if (k) { row[k].method = e.target.value; row[k].mT = true; later(); } });
+    $('#p-rows').addEventListener('change', (e) => {
+      const km = e.target.dataset.rm, kt = e.target.dataset.rt;
+      if (km) { row[km].method = e.target.value; row[km].mT = true; }
+      if (kt) { row[kt].tipo = e.target.value; row[kt].tT = true; }
+      later();
+    });
     build();
   });
+}
+
+// ======================= Inserimento, modifica, eliminazione =======================
+function personForm(mode) {
+  const m = mode === 'edit' ? App.data.memberships[App.detailKey] : null;
+  const p = m ? App.data.persons[m.personId] : {};
+  const manualIsc = mode === 'create' || (m && m.manual);
+  const v = (x) => esc(x || '');
+  const iscr = m ? m.iscrizione : todayIso();
+  const addYear = (iso) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCFullYear(d.getUTCFullYear() + 1); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
+  const stati = ['Attivo', 'Sospeso'].concat(m && !['Attivo', 'Sospeso'].includes(m.stato) ? [m.stato] : []);
+  const fromCsv = mode === 'edit' && !p.manual;
+  openModal(`<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="mt">
+    <header><h2 id="mt">${mode === 'create' ? 'Nuovo tesserato' : 'Modifica tesserato'}</h2></header>
+    <div class="mbody"><div class="form" id="pf">
+      <label>Cognome *<input class="field" id="pf-cognome" value="${v(p.cognome)}" autocomplete="off"></label>
+      <label>Nome *<input class="field" id="pf-nome" value="${v(p.nome)}" autocomplete="off"></label>
+      <label>Data di nascita<input class="field" type="date" id="pf-nascita" value="${v(p.nascita)}" max="${todayIso()}"></label>
+      <label>Provincia di nascita<input class="field" id="pf-prov" value="${v(p.provNascita)}" maxlength="4" placeholder="es. PE"></label>
+      <label class="wide">Codice fiscale<input class="field" id="pf-cf" value="${v(p.cf)}" maxlength="16" autocomplete="off" style="text-transform:uppercase"></label>
+      <label>Email<input class="field" type="email" id="pf-email" value="${v(p.email)}" autocomplete="off"></label>
+      <label>Cellulare<input class="field" id="pf-cell" value="${v(p.cell)}" inputmode="tel" autocomplete="off"></label>
+      <label class="wide">Indirizzo di residenza<input class="field" id="pf-indirizzo" value="${v(p.indirizzo)}" autocomplete="off"></label>
+      <label>Città<input class="field" id="pf-citta" value="${v(p.citta)}" autocomplete="off"></label>
+      <label>Professione (facoltativa)<input class="field" id="pf-prof" value="${v(p.professione)}" maxlength="120" autocomplete="off"></label>
+      <div class="wide pf-sep">Tessera</div>
+      <label>Data di iscrizione<input class="field" type="date" id="pf-isc" value="${iscr}" ${manualIsc ? '' : 'disabled title="Arriva da Younity e non si cambia"'}></label>
+      <label>Data di scadenza<input class="field" type="date" id="pf-sca" value="${m ? m.scadenza : addYear(iscr)}"></label>
+      <label>Stato<select class="field" id="pf-stato">${stati.map((x) => `<option ${m ? (m.stato === x ? 'selected' : '') : x === 'Attivo' ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+    </div>
+    <div id="pf-err" class="form-error" role="alert" hidden></div>
+    ${fromCsv ? '<p class="hint" style="margin:10px 0 0">I dati arrivati da Younity che modifichi qui restano come li scrivi anche dopo “Rileggi file”. Dalla scheda puoi tornare ai dati del CSV.</p>' : ''}
+    ${mode === 'create' ? '<p class="hint" style="margin:10px 0 0">La tessera inserita compare tra quelle “Da stampare”. L’ID sarà del tipo M001.</p>' : ''}</div>
+    <footer><button class="btn" data-act="close-modal">Annulla</button><button class="btn primary" data-act="save-person" data-mode="${mode}">${mode === 'create' ? 'Inserisci tesserato' : 'Salva modifiche'}</button></footer></div>`, () => {
+    const isc = $('#pf-isc'), sca = $('#pf-sca');
+    let scaTouched = mode === 'edit';
+    sca.addEventListener('input', () => { scaTouched = true; });
+    isc.addEventListener('change', () => { if (!scaTouched && isc.value) sca.value = addYear(isc.value); });
+    $('#pf-cognome').focus();
+  });
+}
+
+function readPersonForm() {
+  const g = (id) => $('#' + id).value;
+  return { cognome: g('pf-cognome'), nome: g('pf-nome'), nascita: g('pf-nascita'), provNascita: g('pf-prov'), cf: g('pf-cf'), email: g('pf-email'), cell: g('pf-cell'), indirizzo: g('pf-indirizzo'), citta: g('pf-citta'), professione: g('pf-prof'), iscrizione: g('pf-isc'), scadenza: g('pf-sca'), stato: g('pf-stato') };
+}
+
+async function savePerson(mode) {
+  const err = $('#pf-err');
+  const show = (msg) => { err.textContent = msg; err.hidden = !msg; };
+  const btn = $('[data-act=save-person]');
+  show('');
+  try {
+    const data = readPersonForm();
+    if (mode === 'create') {
+      const res = await window.api.createPerson(data, btn.dataset.force === '1');
+      if (res.duplicates) {
+        show('Esiste già: ' + res.duplicates.map((d) => `${d.nome} (ID ${d.id}${d.nelCestino ? ', nel cestino' : ''}, ${d.motivo})`).join('; ') + '. Se è davvero un’altra persona, premi “Inserisci comunque”.');
+        btn.dataset.force = '1'; btn.textContent = 'Inserisci comunque';
+        return;
+      }
+      setData(res);
+      closeModal();
+      App.view = 'lista'; App.filters.q = ''; App.filters.stato = ''; App.filters.scad = ''; App.filters.stampa = ''; App.filters.latestOnly = true;
+      App.detailKey = res.created.key;
+      render();
+      toast(`Tesserato inserito (ID ${res.created.personId}). È tra quelli da stampare.`);
+    } else {
+      const res = await window.api.editPerson(App.data.memberships[App.detailKey].personId, App.detailKey, data);
+      setData(res);
+      closeModal();
+      App.detailKey = res.key;
+      render();
+      toast(res.changed.length ? 'Modifiche salvate.' : 'Nessuna modifica.');
+    }
+  } catch (e) { show(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
+}
+
+function confirmDelete() {
+  const m = App.data.memberships[App.detailKey];
+  const p = App.data.persons[m.personId];
+  const n = Object.values(App.data.memberships).filter((x) => x.personId === p.id).length;
+  openModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><header><h2 id="mt">Eliminare ${esc(p.cognome)} ${esc(p.nome)}?</h2></header>
+    <div class="mbody"><p style="margin:0">Il tesserato (ID ${esc(p.id)}) e le sue <b>${n}</b> tessere escono da elenco, calendario e avvisi.</p>
+    <p>Finisce nel <b>cestino</b> (Impostazioni → Cestino): da lì lo puoi ripristinare. Finché è nel cestino la lettura del CSV non lo fa tornare.</p>
+    <p style="color:var(--muted);margin:0">I numeri delle ricevute già emesse restano nel registro.</p></div>
+    <footer><button class="btn" data-act="close-modal">Annulla</button><button class="btn primary danger-solid" data-act="delete-go">${ICON.trash} Sposta nel cestino</button></footer></div>`);
 }
 
 function showRestoreDialog(r) {
@@ -886,6 +1039,33 @@ document.addEventListener('click', async (e) => {
       case 'quit-app':
         if (App.busy && !confirm('Una lettura del file è in corso. Chiudere comunque?')) break;
         await window.api.quit();
+        break;
+      case 'new-person': personForm('create'); break;
+      case 'edit-person': personForm('edit'); break;
+      case 'save-person': await savePerson(act.dataset.mode); break;
+      case 'delete-person': confirmDelete(); break;
+      case 'delete-go': {
+        const pid = App.data.memberships[App.detailKey].personId;
+        const nome = `${App.data.persons[pid].cognome} ${App.data.persons[pid].nome}`;
+        const res = await window.api.deletePerson(pid);
+        setData(res); closeModal(); App.detailKey = null; App.sel.clear(); render();
+        toast(`${nome} spostato nel cestino (${res.tessere} tessere).`);
+        break;
+      }
+      case 'reset-overrides': {
+        const pid = App.data.memberships[App.detailKey].personId;
+        setData(await window.api.resetOverrides(pid)); render();
+        toast('Alla prossima lettura del file torneranno i dati di Younity.');
+        break;
+      }
+      case 'trash-restore': { setData(await window.api.restorePerson(act.dataset.id)); render(); toast('Tesserato ripristinato.'); break; }
+      case 'trash-purge':
+        if (!confirm('Eliminare per sempre questo tesserato? Se è ancora nel CSV, alla prossima lettura tornerà come nuovo.')) break;
+        setData(await window.api.purgeTrash(act.dataset.id)); render(); toast('Eliminato definitivamente.');
+        break;
+      case 'trash-empty':
+        if (!confirm('Svuotare il cestino? I tesserati presenti ancora nel CSV torneranno come nuovi alla prossima lettura.')) break;
+        setData(await window.api.purgeTrash(null)); render(); toast('Cestino svuotato.');
         break;
       case 'show-data': await window.api.showDataFile(); break;
       default: break;

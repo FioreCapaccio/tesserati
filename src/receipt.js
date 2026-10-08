@@ -12,13 +12,26 @@
     return s;
   }
 
+  const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  // "2026-10" -> "ottobre 2026"
+  function periodLabel(p) {
+    const m = /^(\d{4})-(\d{2})$/.exec(p || '');
+    return m && MESI[Number(m[2]) - 1] ? `${MESI[Number(m[2]) - 1]} ${m[1]}` : '';
+  }
+  function causale(tipo, periodo) {
+    if (tipo !== 'mensile') return 'Quota di iscrizione annuale';
+    const mese = periodLabel(periodo);
+    return mese ? `Retta mensile – ${mese}` : 'Retta mensile';
+  }
+
   function row(label, value) {
     return `<div class="r"><span class="l">${esc(label)}</span><span class="v">${value ? esc(value) : '<i class="blank"></i>'}</span></div>`;
   }
 
   function cell(item, assoc) {
     if (!item) return '<div class="cell"></div>';
-    const { p, m, label, quota, date, method } = item;
+    const { p, m, label, quota, date, method, tipo, periodo } = item;
+    const mensile = tipo === 'mensile';
     const q = formatQuota(quota);
     const nasc = [fmtDate(p.nascita), p.provNascita ? `(${p.provNascita})` : p.cf && /Z\d{3}/.test(p.cf.slice(11, 15)) ? '(estero)' : ''].filter(Boolean).join(' ');
     const resid = [p.indirizzo, p.citta].filter(Boolean).join(' – ');
@@ -33,9 +46,10 @@
     return `
     <div class="cell">
       ${head}
-      <div class="title"><span>Ricevuta di tesseramento</span><b>N° ${esc(label)}</b></div>
+      <div class="title"><span>${mensile ? 'Ricevuta retta mensile' : 'Ricevuta di tesseramento'}</span><b>N° ${esc(label)}</b></div>
       <div class="date">del ${esc(fmtDate(date))}</div>
       <div class="rows">
+        <div class="r causale"><span class="l">Causale</span><span class="v">${esc(causale(tipo, periodo))}</span></div>
         ${row('Tessera ID', p.id)}
         ${row('Tesserato', `${p.cognome} ${p.nome}`)}
         ${row('Nato/a il', nasc)}
@@ -47,7 +61,7 @@
         ${row('Scadenza', fmtDate(m.scadenza))}
         ${row('Stato', m.stato)}
       </div>
-      <div class="quota"><span>Quota associativa versata</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
+      <div class="quota"><span>${mensile ? 'Retta versata' : 'Quota associativa versata'}</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
       <div class="pay"><span class="l2">Metodo di pagamento</span>${method ? `<b>${esc(method)}</b>` : ['Contanti', 'POS', 'Bonifico'].map((x) => `<span class="opt"><i class="box"></i>${x}</span>`).join('')}</div>
       <div class="foot">
         <div class="sig"><i></i><span>Firma per l’associazione</span></div>
@@ -76,6 +90,7 @@
   .r { display: flex; gap: 2mm; padding: 1.15mm 0; border-bottom: .2mm solid #d9d4cd; }
   .l { flex: 0 0 28mm; color: #666; font-size: 7.4pt; text-transform: uppercase; letter-spacing: .03em; padding-top: .3mm; }
   .v { flex: 1; font-weight: 600; word-break: break-word; }
+  .causale .v { font-size: 9pt; }
   .blank { display: inline-block; width: 100%; border-bottom: .2mm dotted #999; height: 3mm; }
   .quota { margin-top: 3.4mm; display: flex; justify-content: space-between; align-items: baseline; padding: 2.2mm 2.6mm; border: .35mm solid #1d1717; font-size: 8.6pt; }
   .quota b { font-size: 11pt; min-width: 32mm; text-align: right; }
@@ -100,5 +115,5 @@
     return `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Ricevute</title><style>${CSS}${preview ? PREVIEW_CSS : ''}</style></head><body>${body}</body></html>`;
   }
 
-  window.Receipt = { build, formatQuota, esc };
+  window.Receipt = { build, formatQuota, esc, periodLabel, causale };
 })();
