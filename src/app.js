@@ -417,7 +417,7 @@ async function loadCorsi() {
   finally { App.csLoading = false; if (App.view === 'corsisti') render(); }
 }
 
-const csSlotName = (slot) => (slot === 'iscrizione' ? 'Iscrizione al corso' : `Retta ${MONTHS[Number(slot.slice(5, 7)) - 1]}`);
+const csSlotName = (slot) => (slot === 'iscrizione' ? 'Iscrizione al corso' : `Rata di ${MONTHS[Number(slot.slice(5, 7)) - 1]}`);
 function csStatusText(i) {
   if (i.status === 'pagato') return `Pagato${i.paidAt ? ' il ' + new Date(i.paidAt).toLocaleDateString('it-IT') : ''}${i.receipt ? ` · ricevuta n° ${esc(i.receipt.label || i.receipt.no)}` : ''}`;
   if (i.status === 'nondovuto') return 'Non dovuto';
@@ -513,7 +513,7 @@ async function csSet(entries, status) {
 function csOpenPrint(entries) {
   const d = App.corsi, month = d.months[App.cs.mi];
   const byKey = new Map(d.items.map((i) => [csEntry(i), i]));
-  const rows = entries.map((e) => byKey.get(e)).filter((i) => i && i.key).map((i) => ({ key: i.key, tipo: i.slot === 'iscrizione' ? 'corso' : 'mensile' }));
+  const rows = entries.map((e) => byKey.get(e)).filter((i) => i && i.key).map((i) => ({ key: i.key, tipo: 'corso', voce: i.slot === 'iscrizione' ? 'iscrizione' : 'rata' }));
   if (!rows.length) { toast('Nessuna ricevuta da stampare.'); return; }
   openPrintDialog(null, { rows, periodo: month });
 }
@@ -652,10 +652,10 @@ function settingsView() {
           ${inp('s-next', 'Prossimo numero ricevuta', s.nextReceipt, 'type="number" min="1"')}
           ${inp('s-prefix', 'Prefisso (es. 2026/)', s.receiptPrefix)}
           ${inp('s-digits', 'Cifre del numero (zeri iniziali)', s.receiptDigits, 'type="number" min="1" max="10"')}
-          ${inp('s-quota', 'Quota predefinita € (vuoto = da scrivere a mano)', s.defaultQuota, 'inputmode="decimal"')}
+          ${inp('s-quota', 'Quota tessera predefinita € (vuoto = da scrivere a mano)', s.defaultQuota, 'inputmode="decimal"')}
           <label>Metodo di pagamento predefinito<select class="field" id="s-pay">${payOptions(s.defaultPayment, 'Da segnare a mano sulla ricevuta')}</select></label>
-          <label>Tipo di ricevuta predefinito<select class="field" id="s-rtype">${[['annuale', 'Quota di iscrizione annuale'], ['mensile', 'Retta mensile']].map(([v, l]) => `<option value="${v}" ${s.defaultReceiptType === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-          ${inp('s-retta', 'Retta mensile predefinita € (vuoto = a mano)', s.defaultRetta, 'inputmode="decimal"')}
+          <label>Tipo di ricevuta predefinito<select class="field" id="s-rtype">${[['annuale', 'Tessera associativa'], ['mensile', 'Corso – rata mensile']].map(([v, l]) => `<option value="${v}" ${s.defaultReceiptType === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${inp('s-retta', 'Rata mensile del corso predefinita € (vuoto = a mano)', s.defaultRetta, 'inputmode="decimal"')}
           ${inp('s-corso', 'Iscrizione al corso predefinita € (vuoto = a mano)', s.defaultIscrizioneCorso, 'inputmode="decimal"')}
         </div>
         <p class="path" style="margin:10px 0 0">Anteprima numero: <b id="numprev">${esc(s.receiptPrefix + String(s.nextReceipt).padStart(s.receiptDigits, '0'))}</b></p></section>
@@ -758,32 +758,43 @@ function showImportReport(res) {
 
 const PAY = ['Contanti', 'POS', 'Bonifico'];
 const payOptions = (val, blank) => [['', blank], ...PAY.map((x) => [x, x])].map(([v, l]) => `<option value="${v}" ${v === (val || '') ? 'selected' : ''}>${l}</option>`).join('');
-const TIPI = [['annuale', 'Iscrizione annuale', 'Annuale'], ['mensile', 'Retta mensile', 'Mensile'], ['corso', 'Iscrizione al corso', 'Corso']];
-const tipoOptions = (val, short) => TIPI.map(([v, l, sh]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${short ? sh : l}</option>`).join('');
+const TIPI = [['annuale', 'Tessera associativa (annuale)', 'Tessera'], ['corso', 'Corso', 'Corso']];
+const VOCI = [['rata', 'Rata mensile'], ['iscrizione', 'Iscrizione (novembre)'], ];
+const optList = (list, val, short) => list.map(([v, l, sh]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${short && sh ? sh : l}</option>`).join('');
 const thisMonth = () => todayIso().slice(0, 7);
 const seasonOfDate = (iso) => (Number(iso.slice(5, 7)) >= 6 ? Number(iso.slice(0, 4)) : Number(iso.slice(0, 4)) - 1);
+// Tipo "registrato" di una ricevuta: tessera = annuale; corso + rata = mensile; corso + iscrizione = corso.
+const ledgerTipo = (st) => (st.tipo === 'annuale' ? 'annuale' : st.voce === 'iscrizione' ? 'corso' : 'mensile');
 
-// keys: tessere da stampare. opts.rows: [{ key, tipo }] per avere più ricevute della stessa persona (es. retta + iscrizione a novembre);
-// opts.periodo: mese della retta (YYYY-MM).
+// keys: tessere da stampare. opts.rows: [{ key, tipo: 'annuale'|'corso', voce: 'rata'|'iscrizione' }] per avere più ricevute della stessa
+// persona (es. rata + iscrizione di novembre); opts.periodo: mese della rata (YYYY-MM).
 function openPrintDialog(keys, opts = {}) {
   const { rows } = derive();
   const map = new Map(rows.map((r) => [r.m.key, r]));
   const spec = opts.rows || (keys || []).map((k) => ({ key: k }));
   const s = S();
-  const startTipo = opts.rows && opts.rows.length && opts.rows.every((x) => x.tipo === opts.rows[0].tipo) ? opts.rows[0].tipo : s.defaultReceiptType;
-  const defQuotaFor = (t) => (t === 'mensile' ? s.defaultRetta : t === 'corso' ? s.defaultIscrizioneCorso : s.defaultQuota);
-  const items = spec.map((sp, i) => ({ id: `${sp.key}#${i}`, r: map.get(sp.key), fixed: sp.tipo || null, i })).filter((x) => x.r)
+  const top = s.defaultReceiptType === 'mensile' ? { tipo: 'corso', voce: 'rata' } : { tipo: 'annuale', voce: 'rata' };
+  if (opts.rows && opts.rows.length && opts.rows.every((x) => x.tipo === opts.rows[0].tipo)) {
+    top.tipo = opts.rows[0].tipo;
+    const v0 = opts.rows[0].voce || 'rata';
+    top.voce = opts.rows.every((x) => (x.voce || 'rata') === v0) ? v0 : 'rata';   // voci miste (rata + iscrizione): resta quella di ogni riga
+  }
+  const defQuotaFor = (st) => (st.tipo === 'annuale' ? s.defaultQuota : st.voce === 'iscrizione' ? s.defaultIscrizioneCorso : s.defaultRetta);
+  const items = spec.map((sp, i) => ({ id: `${sp.key}#${i}`, r: map.get(sp.key), fixed: sp.tipo || null, fixedVoce: sp.voce || null, i })).filter((x) => x.r)
     .sort((x, y) => byName(x.r, y.r) || x.i - y.i);
   if (!items.length) return;
   const pages = Math.ceil(items.length / 4);
-  // Valori per singola ricevuta: partono da quelli salvati sulla tessera (solo per l'iscrizione annuale), altrimenti dai predefiniti.
-  const row = {};
-  items.forEach((it) => {
-    const t = it.fixed || startTipo;
-    const own = t === 'annuale';
-    row[it.id] = { tipo: t, quota: (own && it.r.m.quota) || defQuotaFor(t), method: (own && it.r.m.paymentMethod) || s.defaultPayment, qT: own && !!it.r.m.quota, mT: own && !!it.r.m.paymentMethod, tT: !!it.fixed };
-  });
   const touched = { quota: false };
+  // Valori per singola ricevuta: per la tessera partono da quelli salvati sulla tessera, altrimenti dai predefiniti.
+  const row = {};
+  const quotaFor = (st) => (touched.quota && st.tipo === top.tipo && (st.tipo === 'annuale' || st.voce === top.voce) ? $('#p-quota').value : defQuotaFor(st));
+  items.forEach((it) => {
+    const tipo = it.fixed || top.tipo, voce = it.fixedVoce || top.voce, own = tipo === 'annuale';
+    const st = { tipo, voce, quota: '', method: (own && it.r.m.paymentMethod) || s.defaultPayment, qT: own && !!it.r.m.quota, mT: own && !!it.r.m.paymentMethod, tT: !!it.fixed, vT: !!it.fixedVoce };
+    st.quota = (own && it.r.m.quota) || defQuotaFor(st);
+    row[it.id] = st;
+  });
+  const el = (kind, id) => document.querySelector(`[data-${kind}="${CSS.escape(id)}"]`);
   openModal(`<div class="modal big" role="dialog" aria-modal="true" aria-labelledby="mt">
     <header><h2 id="mt">Stampa ricevute</h2></header>
     <div class="mbody"><div class="print-grid">
@@ -793,25 +804,27 @@ function openPrintDialog(keys, opts = {}) {
           <label>Data della ricevuta<input class="field" type="date" id="p-date" value="${todayIso()}"></label>
           <label>Primo numero<input class="field" type="number" min="1" id="p-start" value="${s.nextReceipt}"></label>
         </div>
-        <label>Tipo di ricevuta<select class="field" id="p-tipo">${tipoOptions(startTipo)}</select></label>
-        <label id="p-per" hidden>Mese della retta<input class="field" type="month" id="p-periodo" value="${opts.periodo || thisMonth()}"></label>
+        <label>Tipo di ricevuta<select class="field" id="p-tipo">${optList(TIPI, top.tipo)}</select></label>
+        <label id="p-voce-w" hidden>Per il corso<select class="field" id="p-voce">${optList(VOCI, top.voce)}</select></label>
+        <label id="p-per" hidden>Mese della rata<input class="field" type="month" id="p-periodo" value="${opts.periodo || thisMonth()}"></label>
         <div class="hint" id="p-corso" hidden></div>
         <div class="two">
-          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(defQuotaFor(startTipo))}" inputmode="decimal" placeholder="a mano"></label>
+          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(defQuotaFor(top))}" inputmode="decimal" placeholder="a mano"></label>
           <label>Pagamento predefinito<select class="field" id="p-method">${payOptions(s.defaultPayment, 'Da segnare a mano')}</select></label>
         </div>
-        <div class="hint">Iscrizione annuale: una ristampa tiene il numero già assegnato. Retta mensile e iscrizione al corso: ogni stampa è un pagamento nuovo con un numero nuovo; la tessera non cambia. Per i corsisti la ricevuta segna da sola il pagamento nel Calendario corsisti. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
+        <div class="hint"><b>Tessera associativa</b>: la quota annuale dell’associazione; una ristampa tiene lo stesso numero e la tessera risulta “stampata”. <b>Corso</b>: per chi frequenta i corsi, può essere la rata mensile o l’iscrizione al corso di novembre; ogni stampa prende un numero nuovo, la tessera non cambia e il pagamento viene segnato da solo nel Calendario corsisti. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
         <div class="hint" id="p-range"></div>
         ${s.assoc.nome ? '' : '<div class="hint" style="color:var(--org-tx);background:var(--org-bg);padding:8px 10px;border-radius:8px">Mancano i dati dell’associazione: inseriscili in Impostazioni per averli sulla ricevuta.</div>'}
         <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento · tipo</span></div>
         <div class="rowlist" id="p-rows">${items.map((it) => `<div class="prow"><span class="pn" title="${esc(it.r.p.cognome + ' ' + it.r.p.nome)}">${esc(it.r.p.cognome)} ${esc(it.r.p.nome)}</span>
           <div class="pc"><input class="field" data-rq="${esc(it.id)}" value="${esc(row[it.id].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(it.r.p.cognome)}">
           <select class="field" data-rm="${esc(it.id)}" aria-label="Pagamento ${esc(it.r.p.cognome)}">${payOptions(row[it.id].method, '—')}</select>
-          <select class="field" data-rt="${esc(it.id)}" aria-label="Tipo ${esc(it.r.p.cognome)}">${tipoOptions(row[it.id].tipo, true)}</select></div></div>`).join('')}</div>
+          <select class="field" data-rt="${esc(it.id)}" aria-label="Tipo ${esc(it.r.p.cognome)}">${optList(TIPI, row[it.id].tipo, true)}</select></div>
+          <select class="field pv" data-rv="${esc(it.id)}" aria-label="Voce del corso ${esc(it.r.p.cognome)}" ${row[it.id].tipo === 'corso' ? '' : 'hidden'}>${optList(VOCI, row[it.id].voce)}</select></div>`).join('')}</div>
       </div>
       <div class="preview" id="pv"></div>
     </div></div>
-    <footer><span class="note">Dopo la stampa la tessera risulta “stampata” (solo per l’iscrizione annuale) e il progressivo avanza.</span>
+    <footer><span class="note">Dopo la stampa la tessera risulta “stampata” (solo per la ricevuta della tessera) e il progressivo avanza.</span>
       <button class="btn" data-act="close-modal">Annulla</button>
       <button class="btn" data-act="do-print" data-mode="pdf">Salva PDF…</button>
       <button class="btn primary" data-act="do-print" data-mode="print">${ICON.print} Stampa</button></footer></div>`, () => {
@@ -824,19 +837,20 @@ function openPrintDialog(keys, opts = {}) {
       const receipts = [];
       let lastNew = null;
       for (const it of items) {
-        const st = row[it.id], m = it.r.m;
-        const reuse = st.tipo === 'annuale' && m.receiptNo;      // ristampa dell'iscrizione annuale: stesso numero
+        const st = row[it.id], m = it.r.m, lt = ledgerTipo(st);
+        const reuse = lt === 'annuale' && m.receiptNo;      // ristampa della tessera: stesso numero
         let no = reuse ? m.receiptNo : null;
         let label = reuse ? m.receiptLabel : '';
         if (!no) { no = n++; label = s.receiptPrefix + String(no).padStart(s.receiptDigits, '0'); lastNew = no; }
-        const per = st.tipo === 'mensile' ? periodo : st.tipo === 'corso' ? season : '';
-        out.push({ p: it.r.p, m, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
-        receipts.push({ key: m.key, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
+        const per = lt === 'mensile' ? periodo : lt === 'corso' ? season : '';
+        out.push({ p: it.r.p, m, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: lt, periodo: per });
+        receipts.push({ key: m.key, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: lt, periodo: per });
       }
+      $('#p-voce-w').hidden = top.tipo !== 'corso';
       $('#p-per').hidden = !receipts.some((r) => r.tipo === 'mensile');
-      const hasCorso = receipts.some((r) => r.tipo === 'corso');
-      $('#p-corso').hidden = !hasCorso;
-      if (hasCorso) $('#p-corso').textContent = `Iscrizione al corso: stagione ${Receipt.seasonLabel(season)} (ricavata dalla data della ricevuta).`;
+      const hasIscr = receipts.some((r) => r.tipo === 'corso');
+      $('#p-corso').hidden = !hasIscr;
+      if (hasIscr) $('#p-corso').textContent = `Iscrizione al corso: stagione ${Receipt.seasonLabel(season)} (ricavata dalla data della ricevuta).`;
       const nums = receipts.map((x) => x.no);
       $('#p-range').textContent = `Numeri: dal ${s.receiptPrefix}${String(Math.min(...nums)).padStart(s.receiptDigits, '0')} al ${s.receiptPrefix}${String(Math.max(...nums)).padStart(s.receiptDigits, '0')}.`;
       const html = Receipt.build(out, s.assoc);
@@ -849,37 +863,42 @@ function openPrintDialog(keys, opts = {}) {
     };
     let t;
     const later = () => { clearTimeout(t); t = setTimeout(build, 200); };
-    for (const id of ['p-date', 'p-start', 'p-periodo']) $('#' + id).addEventListener('input', later);
-    // I predefiniti si propagano alle righe non modificate a mano.
-    $('#p-quota').addEventListener('input', (e) => {
-      touched.quota = true;
-      document.querySelectorAll('[data-rq]').forEach((i) => { const st = row[i.dataset.rq]; if (!st.qT) { st.quota = e.target.value; i.value = e.target.value; } });
+    // Aggiorna quota e visibilità delle righe che non sono state toccate a mano.
+    const recompute = () => {
+      for (const it of items) {
+        const st = row[it.id];
+        if (!st.qT) { st.quota = quotaFor(st); el('rq', it.id).value = st.quota; }
+        el('rt', it.id).value = st.tipo; el('rv', it.id).value = st.voce; el('rv', it.id).hidden = st.tipo !== 'corso';
+      }
       later();
-    });
+    };
+    for (const id of ['p-date', 'p-start', 'p-periodo']) $('#' + id).addEventListener('input', later);
+    $('#p-quota').addEventListener('input', () => { touched.quota = true; recompute(); });
     $('#p-method').addEventListener('change', (e) => {
-      document.querySelectorAll('[data-rm]').forEach((i) => { const st = row[i.dataset.rm]; if (!st.mT) { st.method = e.target.value; i.value = e.target.value; } });
+      for (const it of items) { const st = row[it.id]; if (!st.mT) { st.method = e.target.value; el('rm', it.id).value = e.target.value; } }
       later();
     });
     $('#p-tipo').addEventListener('change', (e) => {
-      const tipo = e.target.value;
-      if (!touched.quota) $('#p-quota').value = defQuotaFor(tipo);
-      document.querySelectorAll('[data-rt]').forEach((i) => {
-        const st = row[i.dataset.rt];
-        if (st.tT) return;
-        st.tipo = tipo; i.value = tipo;
-        const q = document.querySelector(`[data-rq="${CSS.escape(i.dataset.rt)}"]`);
-        if (!st.qT) { st.quota = $('#p-quota').value; q.value = st.quota; }
-      });
-      later();
+      top.tipo = e.target.value;
+      for (const it of items) if (!row[it.id].tT) row[it.id].tipo = top.tipo;
+      if (!touched.quota) $('#p-quota').value = defQuotaFor(top);
+      recompute();
+    });
+    $('#p-voce').addEventListener('change', (e) => {
+      top.voce = e.target.value;
+      for (const it of items) if (!row[it.id].vT) row[it.id].voce = top.voce;
+      if (!touched.quota) $('#p-quota').value = defQuotaFor(top);
+      recompute();
     });
     $('#p-rows').addEventListener('input', (e) => { const k = e.target.dataset.rq; if (k) { row[k].quota = e.target.value; row[k].qT = true; later(); } });
     $('#p-rows').addEventListener('change', (e) => {
-      const km = e.target.dataset.rm, kt = e.target.dataset.rt;
+      const km = e.target.dataset.rm, kt = e.target.dataset.rt, kv = e.target.dataset.rv;
       if (km) { row[km].method = e.target.value; row[km].mT = true; }
       if (kt) { row[kt].tipo = e.target.value; row[kt].tT = true; }
-      later();
+      if (kv) { row[kv].voce = e.target.value; row[kv].vT = true; }
+      recompute();
     });
-    build();
+    recompute();
   });
 }
 
