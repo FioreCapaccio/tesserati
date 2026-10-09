@@ -11,7 +11,7 @@ module.exports = ({ win, state, saveState, S, app }) => {
   fs.mkdirSync(out, { recursive: true });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const js = (code) => win.webContents.executeJavaScript(code);
-  const shot = async (name) => { await wait(900); fs.writeFileSync(path.join(out, name + '.png'), (await win.webContents.capturePage()).toPNG()); console.log('shot', name); };
+  const shot = async (name) => { await wait(500); await win.webContents.capturePage(); await wait(500); fs.writeFileSync(path.join(out, name + '.png'), (await win.webContents.capturePage()).toPNG()); console.log('shot', name); };
   const log = (...a) => console.log('[smoke]', ...a);
 
   win.webContents.once('did-finish-load', async () => {
@@ -111,11 +111,12 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await shot('21-scheda-modificata');
       // ricevuta: retta mensile
       await js(`document.querySelector('[data-act=print-one]').click()`); await wait(700);
-      await js(`(()=>{const t=document.getElementById('p-tipo');t.value='mensile';t.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-      await setv('p-quota', '40'); await setv('p-periodo', '2026-10'); await wait(800);
+      await js(`(()=>{const t=document.getElementById('p-tipo');t.value='corso';t.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      log('scelte del tipo =', JSON.stringify(await js(`[...document.getElementById('p-tipo').options].map(o=>o.textContent)`)), '| voci del corso =', JSON.stringify(await js(`[...document.getElementById('p-voce').options].map(o=>o.textContent)`)));
+      await setv('p-quota', '40'); await setv('p-periodo', '2026-11'); await wait(800);
       const rp = await js(`openPrintDialog.current.receipts[0]`);
       const rh = await js(`openPrintDialog.current.html`);
-      log('ricevuta retta: tipo/periodo/quota =', rp.tipo, rp.periodo, rp.quota, '| nel testo: titolo =', rh.includes('Ricevuta retta mensile'), '| causale =', rh.includes('Retta mensile – ottobre 2026'), '| "Retta versata" =', rh.includes('Retta versata'));
+      log('ricevuta corso/rata: tipo/periodo/quota =', rp.tipo, rp.periodo, rp.quota, '| titolo =', rh.includes('Ricevuta corso'), '| causale =', rh.includes('Corso 2026/27 – rata di novembre 2026'), '| "Rata del corso versata" =', rh.includes('Rata del corso versata'));
       await shot('22-stampa-retta-mensile');
       await js(`closeModal()`);
       // eliminazione e cestino
@@ -163,7 +164,8 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await js(`document.querySelector('[data-act=cs-bulk-print]').click()`); await wait(1200);
       const cr = await js(`openPrintDialog.current.receipts.map(r=>r.tipo+':'+r.periodo+':'+r.no)`);
       const ch = await js(`openPrintDialog.current.html`);
-      log('ricevute da stampare =', JSON.stringify(cr), '| causale corso =', ch.includes('Iscrizione al corso 2026/27'), '| causale retta =', ch.includes('Retta mensile – novembre 2026'), '| titolo corso =', ch.includes('Ricevuta iscrizione al corso'));
+      log('stampa dal calendario: tipo in alto =', await js(`document.getElementById('p-tipo').value`), '| voce in alto visibile =', await js(`!document.getElementById('p-voce-w').hidden`), '| tipi delle righe =', JSON.stringify(await js(`[...document.querySelectorAll('[data-rt]')].map(e=>e.value)`)), '| voci delle righe =', JSON.stringify(await js(`[...document.querySelectorAll('[data-rv]')].map(e=>e.value)`)));
+      log('ricevute da stampare =', JSON.stringify(cr), '| causale iscrizione =', ch.includes('Corso 2026/27 – iscrizione'), '| causale rata =', ch.includes('Corso 2026/27 – rata di novembre 2026'), '| titolo =', ch.includes('Ricevuta corso'), '| nessuna "Retta" =', !/Retta/.test(ch));
       await shot('27-stampa-corsista');
       const payload = await js(`({receipts: openPrintDialog.current.receipts, nextReceipt: openPrintDialog.current.nextReceipt})`);
       await js(`closeModal()`);

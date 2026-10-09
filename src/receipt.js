@@ -23,10 +23,14 @@
     return /^\d{4}$/.test(String(y)) ? `${n}/${String((n + 1) % 100).padStart(2, '0')}` : '';
   }
   function causale(tipo, periodo) {
-    if (tipo === 'corso') { const s = seasonLabel(periodo); return s ? `Iscrizione al corso ${s}` : 'Iscrizione al corso'; }
-    if (tipo !== 'mensile') return 'Quota di iscrizione annuale';
+    // 'corso' = iscrizione al corso (periodo = anno della stagione); 'mensile' = rata mensile del corso (periodo = mese)
+    if (tipo === 'corso') { const s = seasonLabel(periodo); return s ? `Corso ${s} – iscrizione` : 'Corso – iscrizione'; }
+    if (tipo !== 'mensile') return 'Tessera associativa – quota annuale';
     const mese = periodLabel(periodo);
-    return mese ? `Retta mensile – ${mese}` : 'Retta mensile';
+    const y = Number((periodo || '').slice(0, 4)), mo = Number((periodo || '').slice(5, 7));
+    const stagione = mo >= 11 ? y : mo >= 1 && mo <= 5 ? y - 1 : null;
+    const sl = stagione ? seasonLabel(stagione) : '';
+    return mese ? `Corso${sl ? ' ' + sl : ''} – rata di ${mese}` : 'Corso – rata mensile';
   }
 
   function row(label, value) {
@@ -52,7 +56,7 @@
     return `
     <div class="cell">
       ${head}
-      <div class="title"><span>${mensile ? 'Ricevuta retta mensile' : corso ? 'Ricevuta iscrizione al corso' : 'Ricevuta di tesseramento'}</span><b>N° ${esc(label)}</b></div>
+      <div class="title"><span>${mensile || corso ? 'Ricevuta corso' : 'Ricevuta di tesseramento'}</span><b>N° ${esc(label)}</b></div>
       <div class="date">del ${esc(fmtDate(date))}</div>
       <div class="rows">
         <div class="r causale"><span class="l">Causale</span><span class="v">${esc(causale(tipo, periodo))}</span></div>
@@ -67,7 +71,7 @@
         ${row('Scadenza', fmtDate(m.scadenza))}
         ${row('Stato', m.stato)}
       </div>
-      <div class="quota"><span>${mensile ? 'Retta versata' : corso ? 'Quota di iscrizione versata' : 'Quota associativa versata'}</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
+      <div class="quota"><span>${mensile ? 'Rata del corso versata' : corso ? 'Iscrizione al corso versata' : 'Quota associativa versata'}</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
       <div class="pay"><span class="l2">Metodo di pagamento</span>${method ? `<b>${esc(method)}</b>` : ['Contanti', 'POS', 'Bonifico'].map((x) => `<span class="opt"><i class="box"></i>${x}</span>`).join('')}</div>
       <div class="foot">
         <div class="sig"><i></i><span>Firma per l’associazione</span></div>

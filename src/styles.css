@@ -298,3 +298,4 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .nav > span:nth-child(2) { white-space: nowrap; }
 .seasonline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
 .cal-nav h2 { min-width: 0; }
+.prow .pv { width: 100%; margin-top: 2px; }
