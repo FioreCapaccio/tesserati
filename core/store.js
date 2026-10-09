@@ -2,6 +2,7 @@
 // Logica dei dati (senza dipendenze da Electron): importazione, aggiornamenti, stampa.
 
 const { DEFAULT_SUBJECT, DEFAULT_BODY } = require('./reminders');
+const Corsi = require('./corsi');
 
 const DEFAULT_SETTINGS = {
   assoc: { nome: '', indirizzo: '', cf: '', telefono: '', email: '', logo: '', nota: '' },
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS = {
   defaultPayment: '', // '' = da indicare a mano sulla ricevuta
   defaultReceiptType: 'annuale', // 'annuale' = iscrizione annuale, 'mensile' = retta mensile
   defaultRetta: '', // quota predefinita della retta mensile
+  defaultIscrizioneCorso: '', // quota predefinita dell'iscrizione al corso
   theme: 'system', // 'system' | 'light' | 'dark'
   mail: {
     provider: 'gmail', // 'gmail' | 'outlook' | 'altro'
@@ -141,6 +143,7 @@ function updatePerson(state, id, patch) {
   if ('note' in patch) p.note = String(patch.note || '');
   if ('professione' in patch) p.professione = String(patch.professione || '').replace(/\s+/g, ' ').trim().slice(0, 120);
   if ('noEmail' in patch) p.noEmail = !!patch.noEmail;
+  if ('corsista' in patch) p.corsista = !!patch.corsista;
 }
 
 // Segna come avvisate le tessere (invio riuscito o già avvisate in altro modo).
@@ -165,9 +168,9 @@ function commitPrint(state, receipts, nextReceipt, now = new Date()) {
     const m = state.memberships[r.key];
     if (!m) continue;
     const p = state.persons[m.personId];
-    const tipo = r.tipo === 'mensile' ? 'mensile' : 'annuale';
+    const tipo = ['mensile', 'corso'].includes(r.tipo) ? r.tipo : 'annuale';
     const method = validPayment(r.method) ? (r.method || '') : '';
-    const entry = { tipo, periodo: tipo === 'mensile' ? (r.periodo || '') : '', no: r.no, label: r.label, date: r.date || '', key: r.key, personId: m.personId, nome: p ? `${p.cognome} ${p.nome}`.trim() : '', quota: r.quota || '', method, at: now.toISOString() };
+    const entry = { tipo, periodo: tipo === 'annuale' ? '' : (r.periodo || ''), no: r.no, label: r.label, date: r.date || '', key: r.key, personId: m.personId, nome: p ? `${p.cognome} ${p.nome}`.trim() : '', quota: r.quota || '', method, at: now.toISOString() };
     if (tipo === 'annuale') {
       m.printed = true;
       m.printedAt = now.toISOString();
@@ -177,7 +180,10 @@ function commitPrint(state, receipts, nextReceipt, now = new Date()) {
       m.paymentMethod = method;
       m.receiptDate = r.date || '';
       if (!state.receipts.some((x) => x.tipo === 'annuale' && x.key === r.key && x.no === r.no)) state.receipts.push(entry);
-    } else state.receipts.push(entry);
+    } else {
+      state.receipts.push(entry);
+      Corsi.markFromReceipt(state, { ...r, tipo }, now);
+    }
   }
   if (Number.isFinite(nextReceipt)) state.settings.nextReceipt = nextReceipt;
 }
@@ -192,6 +198,7 @@ function saveSettings(state, settings) {
   if (!validPayment(s.defaultPayment)) s.defaultPayment = '';
   if (!['annuale', 'mensile'].includes(s.defaultReceiptType)) s.defaultReceiptType = 'annuale';
   s.defaultRetta = String(s.defaultRetta || '').trim();
+  s.defaultIscrizioneCorso = String(s.defaultIscrizioneCorso || '').trim();
   const m = s.mail;
   if (!['gmail', 'outlook', 'altro'].includes(m.provider)) m.provider = 'gmail';
   m.user = String(m.user || '').trim().toLowerCase();

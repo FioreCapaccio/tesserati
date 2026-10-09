@@ -133,6 +133,47 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await js(`document.querySelector('[data-act=trash-restore]').click()`); await wait(600);
       log('ripristinato =', !!st.persons['1472513'] && !st.trash['1472513'], '| tessere =', Object.values(st.memberships).filter((m) => m.personId === '1472513').length);
 
+      // ---- corsisti ----
+      const keyOf = (pid) => Object.values(st.memberships).find((m) => m.personId === pid && !m.manual || m.personId === pid).key;
+      await js(`document.querySelector('[data-nav=lista]').click()`); await wait(300);
+      for (const pid of ['1472513', '1375050']) {
+        await js(`document.querySelector('tr[data-key="${keyOf(pid)}"]').click()`); await wait(300);
+        await js(`document.getElementById('corsista').click()`); await wait(500);
+      }
+      log('corsisti segnati =', Object.values(st.persons).filter((p) => p.corsista).map((p) => p.id).join(','));
+      await js(`App.filters.corsisti='si';render()`); await wait(300);
+      log('filtro "solo corsisti": righe =', await js(`document.querySelectorAll('#tbody tr').length`));
+      await js(`App.filters.corsisti='';render()`);
+      await js(`document.querySelector('[data-nav=corsisti]').click()`); await wait(1200);
+      log('menu: voci calendario =', JSON.stringify(await js(`[...document.querySelectorAll('.nav span:nth-child(2)')].map(e=>e.textContent).filter(t=>/Calendario/.test(t))`)), '| stagione =', await js(`App.corsi.label`), '| voci =', await js(`App.corsi.items.length`), '| mese iniziale =', await js(`App.corsi.months[App.cs.mi]`));
+      await shot('25-calendario-corsisti-mese');
+      const entry = '1472513|2026-11';
+      await js(`document.querySelector('[data-act=cs-pay][data-e="${entry}"]').click()`); await wait(900);
+      log('pagato a mano: stato =', JSON.stringify(st.persons['1472513'].corso && st.persons['1472513'].corso['2026']['2026-11'] && st.persons['1472513'].corso['2026']['2026-11'].status));
+      await js(`document.querySelector('[data-act=cs-skip][data-e="1375050|iscrizione"]').click()`); await wait(900);
+      await js(`document.querySelector('[data-cs=stagione]').click()`); await wait(900);
+      await js(`document.querySelector('[data-csc="1375050|2026-12"]').click()`); await wait(900);
+      log('matrice: dicembre pagato =', st.persons['1375050'].corso['2026']['2026-12'].status, '| iscrizione non dovuta =', st.persons['1375050'].corso['2026']['iscrizione'].status);
+      await shot('26-calendario-corsisti-stagione');
+      await js(`document.querySelector('[data-cs=mese]').click()`); await wait(900);
+      // stampa: retta + iscrizione di novembre per la stessa persona
+      await js(`document.querySelector('[data-cssel="1472513|iscrizione"]').click()`); await wait(400);
+      await js(`document.querySelector('[data-cssel="1472513|2026-11"]').click()`); await wait(400);
+      log('selezionate per la stampa =', await js(`App.cs.sel.size`));
+      await js(`document.querySelector('[data-act=cs-bulk-print]').click()`); await wait(1200);
+      const cr = await js(`openPrintDialog.current.receipts.map(r=>r.tipo+':'+r.periodo+':'+r.no)`);
+      const ch = await js(`openPrintDialog.current.html`);
+      log('ricevute da stampare =', JSON.stringify(cr), '| causale corso =', ch.includes('Iscrizione al corso 2026/27'), '| causale retta =', ch.includes('Retta mensile – novembre 2026'), '| titolo corso =', ch.includes('Ricevuta iscrizione al corso'));
+      await shot('27-stampa-corsista');
+      const payload = await js(`({receipts: openPrintDialog.current.receipts, nextReceipt: openPrintDialog.current.nextReceipt})`);
+      await js(`closeModal()`);
+      S.updateMemberships(st, [keyOf('1472513')], { printed: true });
+      S.commitPrint(st, payload.receipts, payload.nextReceipt); saveState();   // come dopo una stampa riuscita
+      await js(`window.api.getState().then(r=>{setData(r);render()})`); await wait(1200);
+      const cp = st.persons['1472513'].corso['2026'];
+      log('dopo la stampa: iscrizione =', cp.iscrizione.status, 'n°', cp.iscrizione.no, '| novembre =', cp['2026-11'].status, 'n°', cp['2026-11'].no, '| automatico =', cp['2026-11'].manual === false);
+      await shot('28-corsisti-dopo-stampa');
+
       // ---- avvisi email (trasporto finto: nessuna rete) ----
       st.settings.mail.user = 'associazione@gmail.com'; st.settings.mail.fromName = 'Il Sipario'; saveState();
       await js(`window.api.getState().then(r=>{setData(r);render()})`);

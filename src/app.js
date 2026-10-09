@@ -19,6 +19,7 @@ const ICON = {
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>',
@@ -49,12 +50,14 @@ const App = {
   sort: { key: 'cognome', dir: 1 },
   cal: { y: new Date().getFullYear(), m: new Date().getMonth(), mode: 'mese', day: null, showHidden: false },
   busy: false,
+  corsi: null, csLoading: false, cs: { season: null, mode: 'mese', mi: null, sel: new Set() },
   avvisi: null, avSel: new Set(), avKnown: new Set(), avLoading: false,
 };
 
 function setData(snap) {
   App.data = snap.state;
-  for (const k of ['dataFile', 'version', 'copyright', 'csv', 'defaultDataFile', 'mail']) if (snap[k] !== undefined) App[k] = snap[k];
+  for (const k of ['dataFile', 'version', 'copyright', 'csv', 'defaultDataFile', 'mail', 'corsi']) if (snap[k] !== undefined) (k === 'corsi' ? (App.corsiInfo = snap[k]) : (App[k] = snap[k]));
+  App.corsi = null; // i dati del calendario corsisti si ricalcolano alla prossima apertura
   App.avvisi = null; // i dati degli avvisi si ricalcolano alla prossima apertura
 }
 const S = () => App.data.settings;
@@ -103,7 +106,8 @@ function renderSide() {
     <div class="brand"><img src="brand.png" alt="" width="40" height="40"><span>AROTRON</span></div>
     ${item('lista', 'users', 'Tesserati')}
     ${item('stampare', 'print', 'Da stampare', todo.length)}
-    ${item('calendario', 'cal', 'Calendario')}
+    ${item('calendario', 'cal', 'Calendario tesserati')}
+    ${item('corsisti', 'book', 'Calendario corsisti', App.corsiInfo && App.corsiInfo.overdue ? App.corsiInfo.overdue : null)}
     ${item('avvisi', 'mail', 'Avvisi', App.mail ? App.mail.dueCount : 0)}
     ${item('impostazioni', 'cog', 'Impostazioni')}
     <div class="side-bottom">
@@ -123,6 +127,7 @@ function render() {
   else if (App.view === 'lista' || App.view === 'stampare') body = listView();
   else if (App.view === 'calendario') body = calendarView();
   else if (App.view === 'avvisi') body = avvisiView();
+  else if (App.view === 'corsisti') body = corsistiView();
   else body = settingsView();
   main.innerHTML = `<div class="view">${body}</div><footer class="app-foot">Tesserati · versione ${esc(App.version || '')} · ${esc(App.copyright || '')}</footer>`;
   main.scrollTop = scroll;
@@ -159,6 +164,7 @@ function listView() {
       ${todoMode ? '' : sel('stato', [['', 'Ogni stato'], ['Attivo', 'Attivo'], ['Sospeso', 'Sospeso']], f.stato)}
       ${sel('scad', [['', 'Ogni scadenza'], ['expired', 'Scadute'], ['soon', `Entro ${S().soonDays} giorni`], ['warn', `Entro ${S().warnDays} giorni`], ['ok', 'Valide']], f.scad)}
       ${todoMode ? '' : sel('stampa', [['', 'Ricevuta: tutte'], ['todo', 'Da stampare'], ['done', 'Già stampate']], f.stampa)}
+      ${todoMode ? '' : sel('corsisti', [['', 'Tutti i tesserati'], ['si', 'Solo corsisti']], f.corsisti || '')}
       ${todoMode ? '' : `<label class="check"><input type="checkbox" data-filter="latestOnly" ${f.latestOnly ? 'checked' : ''}> Solo ultima tessera</label>`}
     </div>
     <div id="selbar"></div>
@@ -184,6 +190,7 @@ function filteredRows() {
   else if (f.latestOnly) rows = rows.filter((r) => r.isLatest);
   if (!todoMode && f.stato) rows = rows.filter((r) => r.m.stato === f.stato);
   if (f.scad) rows = rows.filter((r) => r.st === f.scad);
+  if (!todoMode && f.corsisti === 'si') rows = rows.filter((r) => r.p.corsista);
   if (!todoMode && f.stampa) rows = rows.filter((r) => (f.stampa === 'todo') === !r.m.printed);
   if (q.length) {
     rows = rows.filter((r) => {
@@ -207,7 +214,7 @@ function renderTable() {
     const minor = age(p.nascita) != null && age(p.nascita) < 18;
     return `<tr data-key="${esc(m.key)}" class="${App.detailKey === m.key ? 'active' : ''}">
       <td class="cbx"><input type="checkbox" data-sel="${esc(m.key)}" ${App.sel.has(m.key) ? 'checked' : ''} aria-label="Seleziona ${esc(p.cognome)} ${esc(p.nome)}"></td>
-      <td class="name">${esc(p.cognome)} ${esc(p.nome)}${minor ? ' <span class="badge neutral">minorenne</span>' : ''}${p.manual ? ' <span class="badge neutral">manuale</span>' : ''}<small>${esc(p.email)}</small></td>
+      <td class="name">${esc(p.cognome)} ${esc(p.nome)}${minor ? ' <span class="badge neutral">minorenne</span>' : ''}${p.manual ? ' <span class="badge neutral">manuale</span>' : ''}${p.corsista ? ' <span class="badge neutral">corsista</span>' : ''}<small>${esc(p.email)}</small></td>
       <td class="num opt">${esc(p.id)}</td>
       <td class="opt">${fmt(p.nascita)}</td>
       <td class="opt">${esc(p.citta) || '<span style="color:var(--muted)">—</span>'}</td>
@@ -268,6 +275,7 @@ function renderDrawer() {
         ${m.printed ? `<span class="badge neutral">✓ Ricevuta${m.receiptNo ? ' n° ' + esc(m.receiptLabel || m.receiptNo) : ''}</span>` : '<span class="badge todo">Da stampare</span>'}
         ${m.hidden ? '<span class="badge neutral">Nascosta dal calendario</span>' : ''}
         ${p.manual ? '<span class="badge neutral">Inserito a mano</span>' : ''}
+        ${p.corsista ? '<span class="badge neutral">Corsista</span>' : ''}
         ${edited.length ? '<span class="badge neutral">✎ Modificato a mano</span>' : ''}
       </div>
     </div>
@@ -286,6 +294,7 @@ function renderDrawer() {
         <dt>Data di nascita</dt><dd>${fmt(p.nascita)}${a != null ? ` <span style="color:var(--muted)">(${a} anni)</span>` : ''}</dd>
         <dt>Provincia nascita</dt><dd>${esc(p.provNascita) || '<span style="color:var(--muted)">Estero / non indicata</span>'}</dd>
         <dt>Codice fiscale</dt><dd>${esc(p.cf)}</dd>
+        <dt>Corsista</dt><dd><label class="check" style="color:var(--ink)"><input type="checkbox" id="corsista" ${p.corsista ? 'checked' : ''}> È un corsista (compare nel Calendario corsisti)</label></dd>
         <dt>Professione</dt><dd><input class="field" id="professione" value="${esc(p.professione || '')}" maxlength="120" placeholder="facoltativa" autocomplete="off" aria-label="Professione svolta" style="width:100%"></dd>
       </dl></div>
       <div class="d-sec"><h3>Contatti e residenza</h3><dl class="kv">
@@ -342,7 +351,7 @@ function calendarView() {
     <button class="btn sm" data-cal="today">Oggi</button>
     <label class="check" style="margin-left:8px"><input type="checkbox" data-cal-hidden ${c.showHidden ? 'checked' : ''}> Mostra rimosse</label>
     <div class="seg"><button data-cal="mese" aria-pressed="${c.mode === 'mese'}">Mese</button><button data-cal="anno" aria-pressed="${c.mode === 'anno'}">Anno</button></div></div>`;
-  const head = `<div class="page-head"><div><h1>Calendario scadenze</h1><p>Ogni tessera compare nel giorno di scadenza, colorata in base alla distanza da oggi (${new Date().toLocaleDateString('it-IT', { dateStyle: 'long' })}).</p></div></div>`;
+  const head = `<div class="page-head"><div><h1>Calendario tesserati</h1><p>Ogni tessera compare nel giorno di scadenza, colorata in base alla distanza da oggi (${new Date().toLocaleDateString('it-IT', { dateStyle: 'long' })}).</p></div></div>`;
   return head + legend + nav + (c.mode === 'mese' ? monthGrid(rows) : yearGrid(rows));
 }
 
@@ -390,6 +399,123 @@ function yearGrid(rows) {
       <div class="pills">${Object.entries(cnt).filter(([, n]) => n).map(([k, n]) => `<span class="chip ${k}" style="width:auto;display:inline-block;cursor:pointer">${n}</span>`).join('') || '<span style="color:var(--muted)">—</span>'}</div>
       <div class="tot">${list.length} scadenz${list.length === 1 ? 'a' : 'e'}</div></button>`;
   }).join('')}</div>`;
+}
+
+// ======================= Calendario corsisti =======================
+const CS_MESI = ['Nov', 'Dic', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag'];
+const CS_CLASS = { paid: 'ok', expired: 'expired', soon: 'soon', warn: 'warn', future: 'future', skip: 'skip' };
+
+async function loadCorsi() {
+  if (App.csLoading) return;
+  App.csLoading = true;
+  try {
+    const d = await window.api.corsiData(App.cs.season);
+    if (App.cs.season == null) App.cs.season = d.season;
+    if (App.cs.mi == null) { const i = d.months.indexOf(d.today.slice(0, 7)); App.cs.mi = i >= 0 ? i : 0; }
+    App.corsi = d;
+  } catch (e) { toast('Errore: ' + e.message); App.corsi = { items: [], months: [], season: App.cs.season || 0, label: '', today: todayIso(), currentSeason: 0 }; }
+  finally { App.csLoading = false; if (App.view === 'corsisti') render(); }
+}
+
+const csSlotName = (slot) => (slot === 'iscrizione' ? 'Iscrizione al corso' : `Retta ${MONTHS[Number(slot.slice(5, 7)) - 1]}`);
+function csStatusText(i) {
+  if (i.status === 'pagato') return `Pagato${i.paidAt ? ' il ' + new Date(i.paidAt).toLocaleDateString('it-IT') : ''}${i.receipt ? ` · ricevuta n° ${esc(i.receipt.label || i.receipt.no)}` : ''}`;
+  if (i.status === 'nondovuto') return 'Non dovuto';
+  if (i.days < 0) return `Scaduto da ${-i.days} gg`;
+  if (i.days === 0) return 'Scade oggi';
+  return `Scade il ${fmt(i.due)} (tra ${i.days} gg)`;
+}
+const csEntry = (i) => `${i.personId}|${i.slot}`;
+
+function corsistiView() {
+  if (!App.corsi) { loadCorsi(); return '<div class="page-head"><div><h1>Calendario corsisti</h1><p>Caricamento…</p></div></div>'; }
+  const d = App.corsi, cs = App.cs;
+  const people = new Set(d.items.map((i) => i.personId)).size;
+  const head = `<div class="page-head"><div><h1>Calendario corsisti</h1>
+    <p>Stagione dei corsi da novembre a maggio: la rata mensile scade il primo di ogni mese; a novembre c’è anche l’iscrizione al corso.</p></div></div>`;
+  if (!people) {
+    return head + `<div class="empty"><h2>Nessun corsista</h2><p>Apri la scheda di un tesserato e spunta “Corsista”, oppure spuntala quando inserisci un nuovo tesserato.</p>
+      <button class="btn primary" data-act="cs-goto-list">Vai ai tesserati</button></div>`;
+  }
+  const cnt = { paid: 0, expired: 0, soon: 0, rest: 0, skip: 0 };
+  d.items.forEach((i) => { if (i.cls === 'paid') cnt.paid++; else if (i.cls === 'expired') cnt.expired++; else if (i.cls === 'soon') cnt.soon++; else if (i.cls === 'skip') cnt.skip++; else cnt.rest++; });
+  const legend = `<div class="legend">
+    <span class="chip ok">Pagati · ${cnt.paid}</span><span class="chip expired">Scaduti non pagati · ${cnt.expired}</span>
+    <span class="chip soon">Da pagare entro ${S().soonDays} gg · ${cnt.soon}</span><span class="chip warn">Più avanti · ${cnt.rest}</span>
+    <span class="chip skip">Non dovuti · ${cnt.skip}</span><span style="color:var(--muted);align-self:center">${people} corsist${people === 1 ? 'a' : 'i'}</span></div>`;
+  const nav = `<div class="cal-nav">
+    <button class="btn sm" data-cs="prev" aria-label="Stagione precedente">◀</button>
+    <div><h2 style="text-transform:none">Stagione ${esc(d.label)}</h2>
+      <div class="seasonline"><span>dal <b>1° novembre ${d.season}</b> al <b>31 maggio ${d.season + 1}</b></span>
+        <span class="badge ${d.phase === 'incorso' ? 'ok' : d.phase === 'prossima' ? 'warn' : 'neutral'}">${d.phase === 'incorso' ? 'In corso' : d.phase === 'prossima' ? `Non ancora iniziata · parte tra ${d.daysToStart} gg` : 'Conclusa'}</span></div></div>
+    <button class="btn sm" data-cs="next" aria-label="Stagione successiva">▶</button>
+    <button class="btn sm" data-cs="today" ${d.season === d.currentSeason ? 'disabled' : ''}>${d.currentSeason > d.season ? 'Vai alla stagione attuale' : 'Torna alla stagione attuale'}</button>
+    <div class="seg"><button data-cs="mese" aria-pressed="${cs.mode === 'mese'}">Mese</button><button data-cs="stagione" aria-pressed="${cs.mode === 'stagione'}">Stagione</button></div></div>`;
+  return head + legend + nav + (cs.mode === 'mese' ? csMonthView(d) : csSeasonView(d));
+}
+
+function csMonthView(d) {
+  const cs = App.cs;
+  const month = d.months[cs.mi];
+  const [y, mo] = month.split('-').map(Number);
+  const tabs = `<div class="mtabs" role="tablist">${d.months.map((m, i) => `<button role="tab" data-csm="${i}" aria-selected="${i === cs.mi}" class="${i === cs.mi ? 'on' : ''} ${m === d.today.slice(0, 7) ? 'now' : ''}">${CS_MESI[i]}</button>`).join('')}</div>`;
+  const list = d.items.filter((i) => i.slot === month || (i.slot === 'iscrizione' && cs.mi === 0));
+  // griglia del mese: tutte le scadenze cadono il giorno 1
+  const first = new Date(y, mo - 1, 1), lead = (first.getDay() + 6) % 7;
+  const total = Math.ceil((lead + new Date(y, mo, 0).getDate()) / 7) * 7;
+  const shown = list.filter((i) => i.cls !== 'skip');
+  const cells = [];
+  for (let k = 0; k < total; k++) {
+    const dt = new Date(y, mo - 1, 1 - lead + k);
+    const inMonth = dt.getMonth() === mo - 1;
+    const isFirst = inMonth && dt.getDate() === 1;
+    const iso = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+    cells.push(`<div class="day ${inMonth ? '' : 'out'} ${iso === d.today ? 'today' : ''}" style="cursor:default">
+      <div class="dnum"><span>${dt.getDate()}</span>${isFirst && shown.length ? `<span>${shown.length}</span>` : ''}</div>
+      ${isFirst ? shown.slice(0, 4).map((i) => `<button class="chip ${CS_CLASS[i.cls]}" data-open="${esc(i.key)}" title="${esc(i.cognome + ' ' + i.nome)} · ${esc(csSlotName(i.slot))} · ${esc(csStatusText(i))}">${i.slot === 'iscrizione' ? 'Iscr. · ' : ''}${esc(i.cognome)} ${esc(i.nome)}</button>`).join('') + (shown.length > 4 ? `<span class="more">+${shown.length - 4} altri</span>` : '') : ''}</div>`);
+  }
+  const selN = list.filter((i) => cs.sel.has(csEntry(i))).length;
+  return `${tabs}<div class="cal-layout">
+    <div class="cal">${DOW.map((x) => `<div class="dow">${x}</div>`).join('')}${cells.join('')}</div>
+    <aside class="side-card"><h3>Scadenze · ${MONTHS[mo - 1]} ${y} <span style="font-size:14px;color:var(--muted);font-family:var(--sans)">(${list.length})</span></h3>
+      ${selN ? `<div class="cs-bulk"><b>${selN}</b> selezionat${selN === 1 ? 'a' : 'e'}<button class="btn sm" data-act="cs-bulk-pay">Segna pagati</button><button class="btn sm primary" data-act="cs-bulk-print">${ICON.print} Ricevute</button></div>` : ''}
+      <div class="side-list">${list.length ? list.map((i) => `<div class="li cs-row ${i.cls}">
+        <input type="checkbox" data-cssel="${esc(csEntry(i))}" ${cs.sel.has(csEntry(i)) ? 'checked' : ''} aria-label="Seleziona ${esc(i.cognome)} ${esc(csSlotName(i.slot))}">
+        <span class="n" data-open="${esc(i.key)}" style="cursor:pointer"><b>${esc(i.cognome)} ${esc(i.nome)}</b><small>${esc(csSlotName(i.slot))} · <span class="cst ${CS_CLASS[i.cls]}">${csStatusText(i)}</span></small></span>
+        <span class="cs-act">${i.status === 'pagato' || i.status === 'nondovuto'
+          ? `<button class="icon-btn" title="Annulla" aria-label="Annulla" data-act="cs-clear" data-e="${esc(csEntry(i))}">↶</button>`
+          : `<button class="btn sm" data-act="cs-pay" data-e="${esc(csEntry(i))}">Pagato</button><button class="icon-btn" title="Non dovuto" aria-label="Non dovuto" data-act="cs-skip" data-e="${esc(csEntry(i))}">⊘</button>`}
+          <button class="icon-btn" title="Stampa ricevuta" aria-label="Stampa ricevuta" data-act="cs-print" data-e="${esc(csEntry(i))}">${ICON.print}</button></span></div>`).join('')
+        : '<div class="empty" style="padding:28px 16px">Nessuna scadenza in questo mese.</div>'}</div>
+    </aside></div>`;
+}
+
+function csSeasonView(d) {
+  const slots = ['iscrizione', ...d.months];
+  const byPerson = new Map();
+  d.items.forEach((i) => { if (!byPerson.has(i.personId)) byPerson.set(i.personId, []); byPerson.get(i.personId).push(i); });
+  const rows = [...byPerson.values()].sort((a, b) => `${a[0].cognome} ${a[0].nome}`.localeCompare(`${b[0].cognome} ${b[0].nome}`, 'it'));
+  const SYM = { paid: '✓', expired: '!', soon: '●', warn: '○', future: '○', skip: '–' };
+  return `<p class="skipline" style="margin-top:0">Clic su una casella: segna pagato / annulla. Maiusc + clic: non dovuto. Clic sul nome: apre la scheda.</p>
+    <div class="tablewrap"><table class="csmatrix"><thead><tr><th>Corsista</th>${slots.map((sl, k) => `<th class="csh">${k === 0 ? 'Iscriz.' : CS_MESI[k - 1]}<small>${fmt(d.items.find((i) => i.slot === sl).due).slice(0, 5)}</small></th>`).join('')}</tr></thead><tbody>
+    ${rows.map((its) => `<tr style="cursor:default"><td class="name"><span data-open="${esc(its[0].key)}" style="cursor:pointer">${esc(its[0].cognome)} ${esc(its[0].nome)}</span></td>
+      ${slots.map((sl) => { const i = its.find((x) => x.slot === sl); return `<td class="csc-td"><button class="csc ${CS_CLASS[i.cls]}" data-csc="${esc(csEntry(i))}" title="${esc(csSlotName(i.slot))}: ${esc(csStatusText(i))}" aria-label="${esc(csSlotName(i.slot))} ${esc(i.cognome)}: ${esc(csStatusText(i))}">${SYM[i.cls]}</button></td>`; }).join('')}</tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+async function csSet(entries, status) {
+  const season = App.corsi.season;
+  const res = await window.api.corsiSet(entries.map((e) => { const [personId, slot] = e.split('|'); return { personId, season, slot }; }), status);
+  setData(res);
+  render();
+}
+
+function csOpenPrint(entries) {
+  const d = App.corsi, month = d.months[App.cs.mi];
+  const byKey = new Map(d.items.map((i) => [csEntry(i), i]));
+  const rows = entries.map((e) => byKey.get(e)).filter((i) => i && i.key).map((i) => ({ key: i.key, tipo: i.slot === 'iscrizione' ? 'corso' : 'mensile' }));
+  if (!rows.length) { toast('Nessuna ricevuta da stampare.'); return; }
+  openPrintDialog(null, { rows, periodo: month });
 }
 
 // ======================= Avvisi email =======================
@@ -530,6 +656,7 @@ function settingsView() {
           <label>Metodo di pagamento predefinito<select class="field" id="s-pay">${payOptions(s.defaultPayment, 'Da segnare a mano sulla ricevuta')}</select></label>
           <label>Tipo di ricevuta predefinito<select class="field" id="s-rtype">${[['annuale', 'Quota di iscrizione annuale'], ['mensile', 'Retta mensile']].map(([v, l]) => `<option value="${v}" ${s.defaultReceiptType === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
           ${inp('s-retta', 'Retta mensile predefinita € (vuoto = a mano)', s.defaultRetta, 'inputmode="decimal"')}
+          ${inp('s-corso', 'Iscrizione al corso predefinita € (vuoto = a mano)', s.defaultIscrizioneCorso, 'inputmode="decimal"')}
         </div>
         <p class="path" style="margin:10px 0 0">Anteprima numero: <b id="numprev">${esc(s.receiptPrefix + String(s.nextReceipt).padStart(s.receiptDigits, '0'))}</b></p></section>
       <section class="card"><h2>Calendario</h2><p>Soglie dei colori rispetto alla data di oggi: rosso se scaduta, arancione e giallo in base ai giorni mancanti, verde oltre.</p>
@@ -597,7 +724,7 @@ function readSettingsForm() {
   const cur = S();
   return Object.assign({}, cur, {
     assoc: Object.assign({}, cur.assoc, { nome: v('s-nome'), indirizzo: v('s-indirizzo'), cf: v('s-cf'), telefono: v('s-telefono'), email: v('s-email'), nota: v('s-nota') }),
-    nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'), defaultPayment: v('s-pay'), defaultReceiptType: v('s-rtype'), defaultRetta: v('s-retta'),
+    nextReceipt: v('s-next'), receiptPrefix: v('s-prefix'), receiptDigits: v('s-digits'), defaultQuota: v('s-quota'), defaultPayment: v('s-pay'), defaultReceiptType: v('s-rtype'), defaultRetta: v('s-retta'), defaultIscrizioneCorso: v('s-corso'),
     soonDays: v('s-soon'), warnDays: v('s-warn'),
     mail: Object.assign({}, cur.mail, { provider: v('m-provider'), user: v('m-user'), fromName: v('m-from'), replyTo: v('m-reply'), host: v('m-host'), port: v('m-port'), secure: $('#m-secure').checked, daysBefore: v('m-days'), subject: v('m-subject'), body: v('m-body') }),
   });
@@ -631,24 +758,30 @@ function showImportReport(res) {
 
 const PAY = ['Contanti', 'POS', 'Bonifico'];
 const payOptions = (val, blank) => [['', blank], ...PAY.map((x) => [x, x])].map(([v, l]) => `<option value="${v}" ${v === (val || '') ? 'selected' : ''}>${l}</option>`).join('');
-const TIPI = [['annuale', 'Iscrizione annuale'], ['mensile', 'Retta mensile']];
-const tipoOptions = (val, short) => TIPI.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${short ? (v === 'annuale' ? 'Annuale' : 'Mensile') : l}</option>`).join('');
+const TIPI = [['annuale', 'Iscrizione annuale', 'Annuale'], ['mensile', 'Retta mensile', 'Mensile'], ['corso', 'Iscrizione al corso', 'Corso']];
+const tipoOptions = (val, short) => TIPI.map(([v, l, sh]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${short ? sh : l}</option>`).join('');
 const thisMonth = () => todayIso().slice(0, 7);
+const seasonOfDate = (iso) => (Number(iso.slice(5, 7)) >= 6 ? Number(iso.slice(0, 4)) : Number(iso.slice(0, 4)) - 1);
 
-function openPrintDialog(keys) {
+// keys: tessere da stampare. opts.rows: [{ key, tipo }] per avere più ricevute della stessa persona (es. retta + iscrizione a novembre);
+// opts.periodo: mese della retta (YYYY-MM).
+function openPrintDialog(keys, opts = {}) {
   const { rows } = derive();
   const map = new Map(rows.map((r) => [r.m.key, r]));
-  const items = keys.map((k) => map.get(k)).filter(Boolean).sort(byName);
-  if (!items.length) return;
+  const spec = opts.rows || (keys || []).map((k) => ({ key: k }));
   const s = S();
-  const defQuotaFor = (t) => (t === 'mensile' ? s.defaultRetta : s.defaultQuota);
+  const startTipo = opts.rows && opts.rows.length && opts.rows.every((x) => x.tipo === opts.rows[0].tipo) ? opts.rows[0].tipo : s.defaultReceiptType;
+  const defQuotaFor = (t) => (t === 'mensile' ? s.defaultRetta : t === 'corso' ? s.defaultIscrizioneCorso : s.defaultQuota);
+  const items = spec.map((sp, i) => ({ id: `${sp.key}#${i}`, r: map.get(sp.key), fixed: sp.tipo || null, i })).filter((x) => x.r)
+    .sort((x, y) => byName(x.r, y.r) || x.i - y.i);
+  if (!items.length) return;
   const pages = Math.ceil(items.length / 4);
   // Valori per singola ricevuta: partono da quelli salvati sulla tessera (solo per l'iscrizione annuale), altrimenti dai predefiniti.
   const row = {};
-  items.forEach((r) => {
-    const t = s.defaultReceiptType;
+  items.forEach((it) => {
+    const t = it.fixed || startTipo;
     const own = t === 'annuale';
-    row[r.m.key] = { tipo: t, quota: (own && r.m.quota) || defQuotaFor(t), method: (own && r.m.paymentMethod) || s.defaultPayment, qT: own && !!r.m.quota, mT: own && !!r.m.paymentMethod, tT: false };
+    row[it.id] = { tipo: t, quota: (own && it.r.m.quota) || defQuotaFor(t), method: (own && it.r.m.paymentMethod) || s.defaultPayment, qT: own && !!it.r.m.quota, mT: own && !!it.r.m.paymentMethod, tT: !!it.fixed };
   });
   const touched = { quota: false };
   openModal(`<div class="modal big" role="dialog" aria-modal="true" aria-labelledby="mt">
@@ -660,20 +793,21 @@ function openPrintDialog(keys) {
           <label>Data della ricevuta<input class="field" type="date" id="p-date" value="${todayIso()}"></label>
           <label>Primo numero<input class="field" type="number" min="1" id="p-start" value="${s.nextReceipt}"></label>
         </div>
-        <label>Tipo di ricevuta<select class="field" id="p-tipo">${tipoOptions(s.defaultReceiptType)}</select></label>
-        <label id="p-per" ${s.defaultReceiptType === 'mensile' ? '' : 'hidden'}>Mese della retta<input class="field" type="month" id="p-periodo" value="${thisMonth()}"></label>
+        <label>Tipo di ricevuta<select class="field" id="p-tipo">${tipoOptions(startTipo)}</select></label>
+        <label id="p-per" hidden>Mese della retta<input class="field" type="month" id="p-periodo" value="${opts.periodo || thisMonth()}"></label>
+        <div class="hint" id="p-corso" hidden></div>
         <div class="two">
-          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(defQuotaFor(s.defaultReceiptType))}" inputmode="decimal" placeholder="a mano"></label>
+          <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(defQuotaFor(startTipo))}" inputmode="decimal" placeholder="a mano"></label>
           <label>Pagamento predefinito<select class="field" id="p-method">${payOptions(s.defaultPayment, 'Da segnare a mano')}</select></label>
         </div>
-        <div class="hint">Iscrizione annuale: una ristampa tiene il numero già assegnato. Retta mensile: ogni stampa è un pagamento nuovo e prende un numero nuovo; la tessera non cambia. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
+        <div class="hint">Iscrizione annuale: una ristampa tiene il numero già assegnato. Retta mensile e iscrizione al corso: ogni stampa è un pagamento nuovo con un numero nuovo; la tessera non cambia. Per i corsisti la ricevuta segna da sola il pagamento nel Calendario corsisti. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
         <div class="hint" id="p-range"></div>
         ${s.assoc.nome ? '' : '<div class="hint" style="color:var(--org-tx);background:var(--org-bg);padding:8px 10px;border-radius:8px">Mancano i dati dell’associazione: inseriscili in Impostazioni per averli sulla ricevuta.</div>'}
         <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento · tipo</span></div>
-        <div class="rowlist" id="p-rows">${items.map((r) => `<div class="prow"><span class="pn" title="${esc(r.p.cognome + ' ' + r.p.nome)}">${esc(r.p.cognome)} ${esc(r.p.nome)}</span>
-          <div class="pc"><input class="field" data-rq="${esc(r.m.key)}" value="${esc(row[r.m.key].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(r.p.cognome)}">
-          <select class="field" data-rm="${esc(r.m.key)}" aria-label="Pagamento ${esc(r.p.cognome)}">${payOptions(row[r.m.key].method, '—')}</select>
-          <select class="field" data-rt="${esc(r.m.key)}" aria-label="Tipo ${esc(r.p.cognome)}">${tipoOptions(row[r.m.key].tipo, true)}</select></div></div>`).join('')}</div>
+        <div class="rowlist" id="p-rows">${items.map((it) => `<div class="prow"><span class="pn" title="${esc(it.r.p.cognome + ' ' + it.r.p.nome)}">${esc(it.r.p.cognome)} ${esc(it.r.p.nome)}</span>
+          <div class="pc"><input class="field" data-rq="${esc(it.id)}" value="${esc(row[it.id].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(it.r.p.cognome)}">
+          <select class="field" data-rm="${esc(it.id)}" aria-label="Pagamento ${esc(it.r.p.cognome)}">${payOptions(row[it.id].method, '—')}</select>
+          <select class="field" data-rt="${esc(it.id)}" aria-label="Tipo ${esc(it.r.p.cognome)}">${tipoOptions(row[it.id].tipo, true)}</select></div></div>`).join('')}</div>
       </div>
       <div class="preview" id="pv"></div>
     </div></div>
@@ -684,21 +818,25 @@ function openPrintDialog(keys) {
     const build = () => {
       const date = $('#p-date').value || todayIso();
       const periodo = $('#p-periodo').value || thisMonth();
+      const season = String(seasonOfDate(date));
       let n = Math.max(1, parseInt($('#p-start').value, 10) || 1);
       const out = [];
       const receipts = [];
       let lastNew = null;
-      for (const r of items) {
-        const st = row[r.m.key];
-        const reuse = st.tipo === 'annuale' && r.m.receiptNo;      // ristampa dell'iscrizione: stesso numero
-        let no = reuse ? r.m.receiptNo : null;
-        let label = reuse ? r.m.receiptLabel : '';
+      for (const it of items) {
+        const st = row[it.id], m = it.r.m;
+        const reuse = st.tipo === 'annuale' && m.receiptNo;      // ristampa dell'iscrizione annuale: stesso numero
+        let no = reuse ? m.receiptNo : null;
+        let label = reuse ? m.receiptLabel : '';
         if (!no) { no = n++; label = s.receiptPrefix + String(no).padStart(s.receiptDigits, '0'); lastNew = no; }
-        const per = st.tipo === 'mensile' ? periodo : '';
-        out.push({ p: r.p, m: r.m, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
-        receipts.push({ key: r.m.key, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
+        const per = st.tipo === 'mensile' ? periodo : st.tipo === 'corso' ? season : '';
+        out.push({ p: it.r.p, m, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
+        receipts.push({ key: m.key, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: st.tipo, periodo: per });
       }
       $('#p-per').hidden = !receipts.some((r) => r.tipo === 'mensile');
+      const hasCorso = receipts.some((r) => r.tipo === 'corso');
+      $('#p-corso').hidden = !hasCorso;
+      if (hasCorso) $('#p-corso').textContent = `Iscrizione al corso: stagione ${Receipt.seasonLabel(season)} (ricavata dalla data della ricevuta).`;
       const nums = receipts.map((x) => x.no);
       $('#p-range').textContent = `Numeri: dal ${s.receiptPrefix}${String(Math.min(...nums)).padStart(s.receiptDigits, '0')} al ${s.receiptPrefix}${String(Math.max(...nums)).padStart(s.receiptDigits, '0')}.`;
       const html = Receipt.build(out, s.assoc);
@@ -768,6 +906,7 @@ function personForm(mode) {
       <label class="wide">Indirizzo di residenza<input class="field" id="pf-indirizzo" value="${v(p.indirizzo)}" autocomplete="off"></label>
       <label>Città<input class="field" id="pf-citta" value="${v(p.citta)}" autocomplete="off"></label>
       <label>Professione (facoltativa)<input class="field" id="pf-prof" value="${v(p.professione)}" maxlength="120" autocomplete="off"></label>
+      <label class="check wide" style="color:var(--ink)"><input type="checkbox" id="pf-corsista" ${p.corsista ? 'checked' : ''}> Corsista (compare nel Calendario corsisti)</label>
       <div class="wide pf-sep">Tessera</div>
       <label>Data di iscrizione<input class="field" type="date" id="pf-isc" value="${iscr}" ${manualIsc ? '' : 'disabled title="Arriva da Younity e non si cambia"'}></label>
       <label>Data di scadenza<input class="field" type="date" id="pf-sca" value="${m ? m.scadenza : addYear(iscr)}"></label>
@@ -787,7 +926,7 @@ function personForm(mode) {
 
 function readPersonForm() {
   const g = (id) => $('#' + id).value;
-  return { cognome: g('pf-cognome'), nome: g('pf-nome'), nascita: g('pf-nascita'), provNascita: g('pf-prov'), cf: g('pf-cf'), email: g('pf-email'), cell: g('pf-cell'), indirizzo: g('pf-indirizzo'), citta: g('pf-citta'), professione: g('pf-prof'), iscrizione: g('pf-isc'), scadenza: g('pf-sca'), stato: g('pf-stato') };
+  return { cognome: g('pf-cognome'), nome: g('pf-nome'), nascita: g('pf-nascita'), provNascita: g('pf-prov'), cf: g('pf-cf'), email: g('pf-email'), cell: g('pf-cell'), indirizzo: g('pf-indirizzo'), citta: g('pf-citta'), professione: g('pf-prof'), corsista: $('#pf-corsista').checked, iscrizione: g('pf-isc'), scadenza: g('pf-sca'), stato: g('pf-stato') };
 }
 
 async function savePerson(mode) {
@@ -901,6 +1040,7 @@ function go(view) {
   App.view = view;
   if (view === 'calendario' || view === 'impostazioni') App.detailKey = null;
   if (view === 'avvisi') App.avvisi = null;
+  if (view === 'corsisti') { App.corsi = null; App.cs.sel.clear(); }
   App.sel.clear();
   if (view === 'stampare') App.filters.scad = '';
   render();
@@ -940,6 +1080,25 @@ document.addEventListener('click', async (e) => {
     else if (a === 'mese' || a === 'anno') c.mode = a;
     else if (a === 'clearday') c.day = null;
     return render();
+  }
+  const csb = t.closest('[data-cs]');
+  if (csb) {
+    const a = csb.dataset.cs, c = App.cs;
+    if (a === 'prev' || a === 'next') { c.season = (App.corsi ? App.corsi.season : c.season) + (a === 'prev' ? -1 : 1); }
+    else if (a === 'today') c.season = null;
+    else if (a === 'mese' || a === 'stagione') c.mode = a;
+    if (a === 'prev' || a === 'next' || a === 'today') { c.sel.clear(); App.corsi = null; if (a === 'today') c.mi = null; }
+    return render();
+  }
+  const csm = t.closest('[data-csm]');
+  if (csm) { App.cs.mi = Number(csm.dataset.csm); App.cs.sel.clear(); return render(); }
+  const cscell = t.closest('[data-csc]');
+  if (cscell) {
+    const en = cscell.dataset.csc;
+    const it = App.corsi.items.find((i) => csEntry(i) === en);
+    // clic: pagato <-> da pagare; Maiusc + clic: non dovuto <-> da pagare
+    const status = e.shiftKey ? (it.status === 'nondovuto' ? null : 'nondovuto') : (it.status === 'dovuto' ? 'pagato' : null);
+    return csSet([en], status);
   }
   const month = t.closest('[data-month]');
   if (month) { App.cal.m = Number(month.dataset.month); App.cal.mode = 'mese'; App.cal.day = null; return render(); }
@@ -1040,6 +1199,13 @@ document.addEventListener('click', async (e) => {
         if (App.busy && !confirm('Una lettura del file è in corso. Chiudere comunque?')) break;
         await window.api.quit();
         break;
+      case 'cs-pay': await csSet([act.dataset.e], 'pagato'); break;
+      case 'cs-clear': await csSet([act.dataset.e], null); break;
+      case 'cs-skip': await csSet([act.dataset.e], 'nondovuto'); break;
+      case 'cs-print': csOpenPrint([act.dataset.e]); break;
+      case 'cs-bulk-pay': { const e = [...App.cs.sel]; App.cs.sel.clear(); await csSet(e, 'pagato'); toast(`${e.length} pagamenti segnati.`); break; }
+      case 'cs-bulk-print': csOpenPrint([...App.cs.sel]); break;
+      case 'cs-goto-list': App.filters.corsisti = 'si'; go('lista'); break;
       case 'new-person': personForm('create'); break;
       case 'edit-person': personForm('edit'); break;
       case 'save-person': await savePerson(act.dataset.mode); break;
@@ -1090,8 +1256,13 @@ document.addEventListener('change', (e) => {
     renderTable();
   } else if (t.hasAttribute('data-cal-hidden')) { App.cal.showHidden = t.checked; render(); }
   else if (t.id === 'm-provider') $('#m-custom').hidden = t.value !== 'altro';
+  else if (t.dataset.cssel) { t.checked ? App.cs.sel.add(t.dataset.cssel) : App.cs.sel.delete(t.dataset.cssel); render(); }
   else if (t.id === 'av-all') { App.avvisi.groups.forEach((g) => (t.checked ? App.avSel.add(g.email) : App.avSel.delete(g.email))); render(); }
   else if (t.dataset.avsel) { t.checked ? App.avSel.add(t.dataset.avsel) : App.avSel.delete(t.dataset.avsel); render(); }
+  else if (t.id === 'corsista' && App.detailKey) {
+    const pid = App.data.memberships[App.detailKey].personId;
+    window.api.updatePerson(pid, { corsista: t.checked }).then((r) => { setData(r); render(); toast(t.checked ? 'Ora è un corsista: lo trovi nel Calendario corsisti.' : 'Non è più un corsista.'); });
+  }
   else if (t.id === 'noemail' && App.detailKey) {
     const pid = App.data.memberships[App.detailKey].personId;
     window.api.updatePerson(pid, { noEmail: t.checked }).then((r) => { setData(r); render(); toast(t.checked ? 'Questo tesserato non riceverà avvisi email.' : 'Avvisi email riattivati.'); });

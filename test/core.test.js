@@ -290,6 +290,111 @@ console.log(`\n${n} test superati`);
   });
 }
 
+// ---- Corsisti: calendario novembre–maggio ----
+{
+  const C = require('../core/corsi');
+  const P = require('../core/people');
+  const B = require('../core/backup');
+  const rec = (id, nome, cognome) => ({ id, nome, cognome, nascita: '1990-01-01', provNascita: '', cf: 'C' + id, email: `${nome}@x.it`, cell: '', indirizzo: '', citta: '', iscrizione: '2026-01-10', iscrizioneOra: '', scadenza: '2027-01-09', stato: 'Attivo' });
+  const mk = () => { const s = S.emptyState(); S.importRecords(s, [rec('1', 'Anna', 'Rossi'), rec('2', 'Luca', 'Bianchi'), rec('3', 'Zoe', 'Neri')], {}); S.updatePerson(s, '1', { corsista: true }); S.updatePerson(s, '2', { corsista: true }); return s; };
+  const get = (it, id, slot) => it.find((x) => x.personId === id && x.slot === slot);
+
+  t('corsisti: stagione da novembre a maggio, scadenze il 1° del mese, iscrizione il 1° novembre', () => {
+    assert.deepStrictEqual(C.seasonMonths(2026), ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05']);
+    assert.strictEqual(C.seasonLabel(2026), '2026/27');
+    assert.deepStrictEqual([C.dueDate('iscrizione', 2026), C.dueDate('2027-03', 2026)], ['2026-11-01', '2027-03-01']);
+    assert.deepStrictEqual([C.seasonOfDate('2026-10-09'), C.seasonOfDate('2027-05-31'), C.seasonOfDate('2027-06-01')], [2026, 2026, 2027]);
+    assert.deepStrictEqual([C.seasonOfPeriod('2026-12'), C.seasonOfPeriod('2027-01'), C.seasonOfPeriod('2026-10'), C.seasonOfPeriod('2027-06')], [2026, 2026, null, null]);
+  });
+  t('corsisti: la stagione va dal 1° novembre al 31 maggio (prossima / in corso / conclusa)', () => {
+    assert.deepStrictEqual([C.seasonStart(2026), C.seasonEnd(2026)], ['2026-11-01', '2027-05-31']);
+    const ph = (d) => C.seasonPhase(2026, d);
+    assert.deepStrictEqual([ph('2026-10-31'), ph('2026-11-01'), ph('2027-05-31'), ph('2027-06-01')], ['prossima', 'incorso', 'incorso', 'conclusa']);
+    const s = S.emptyState();
+    assert.deepStrictEqual(C.seasonMonths(2026).map((m) => C.dueDate(m, 2026)).filter((d) => d < C.seasonStart(2026) || d > C.seasonEnd(2026)), []);   // tutte le scadenze cadono dentro la stagione
+    assert.strictEqual(C.dueDate('2027-05', 2026), '2027-05-01');
+  });
+  t('corsisti: solo i corsisti compaiono; ognuno ha iscrizione + 7 mesi', () => {
+    const s = mk(); const it = C.items(s, 2026, '2026-10-09');
+    assert.strictEqual(it.length, 2 * 8);
+    assert.ok(!it.some((x) => x.personId === '3'));
+    assert.deepStrictEqual(it.filter((x) => x.personId === '1').map((x) => x.slot), ['iscrizione', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05']);
+    assert.deepStrictEqual(it.filter((x) => x.due === '2026-11-01').map((x) => x.slot), ['iscrizione', 'iscrizione', '2026-11', '2026-11']);   // a novembre due voci a testa
+  });
+  t('corsisti: colori in base a oggi (scaduto, in scadenza, in arrivo, lontano)', () => {
+    const s = mk();
+    const at = (today) => { const it = C.items(s, 2026, today); return [get(it, '1', '2026-11').cls, get(it, '1', '2026-12').cls, get(it, '1', '2027-03').cls]; };
+    assert.deepStrictEqual(at('2026-10-09'), ['soon', 'warn', 'future']);       // 23, 53, 143 giorni
+    assert.deepStrictEqual(at('2026-11-01'), ['soon', 'soon', 'future']);         // il giorno stesso non è ancora scaduto; marzo è a 120 giorni
+    assert.deepStrictEqual(at('2026-11-02'), ['expired', 'soon', 'future']);
+    assert.strictEqual(get(C.items(s, 2026, '2026-11-20'), '1', 'iscrizione').days, -19);
+  });
+  t('corsisti: pagato / non dovuto / annullato', () => {
+    const s = mk();
+    C.setPay(s, '1', 2026, '2026-11', 'pagato', { at: '2026-11-03T10:00:00.000Z' });
+    C.setPay(s, '1', 2026, '2026-12', 'nondovuto');
+    let it = C.items(s, 2026, '2026-11-20');
+    assert.deepStrictEqual([get(it, '1', '2026-11').cls, get(it, '1', '2026-12').cls, get(it, '1', 'iscrizione').cls, get(it, '2', '2026-11').cls], ['paid', 'skip', 'expired', 'expired']);
+    assert.strictEqual(C.overdueCount(s, '2026-11-20'), 2 * 2 - 1);      // Anna: iscrizione; Luca: iscrizione + novembre
+    C.setPay(s, '1', 2026, '2026-11', null);
+    assert.strictEqual(get(C.items(s, 2026, '2026-11-20'), '1', '2026-11').status, 'dovuto');
+    assert.ok(!s.persons['1'].corso[2026]['2026-11']);
+    assert.throws(() => C.setPay(s, '1', 2026, '2026-10', 'pagato'), /non valida/);
+    assert.throws(() => C.setPay(s, '1', 2026, '2026-11', 'forse'), /non valido/);
+  });
+  t('corsisti: la ricevuta della retta mensile segna da sola il mese, solo per i corsisti', () => {
+    const s = mk(); const key = '1_2026-01-10', keyNon = '3_2026-01-10';
+    S.commitPrint(s, [{ key, no: 50, label: 'R50', quota: '40', method: 'POS', date: '2026-11-03', tipo: 'mensile', periodo: '2026-11' }, { key: keyNon, no: 51, label: 'R51', quota: '40', method: 'POS', date: '2026-11-03', tipo: 'mensile', periodo: '2026-11' }], 52);
+    const p = get(C.items(s, 2026, '2026-11-20'), '1', '2026-11');
+    assert.deepStrictEqual([p.status, p.receipt, p.manual], ['pagato', { no: 50, label: 'R50' }, false]);
+    assert.ok(!s.persons['3'].corso);
+    S.commitPrint(s, [{ key, no: 52, label: 'R52', quota: '40', method: '', date: '2026-10-03', tipo: 'mensile', periodo: '2026-10' }], 53);   // ottobre: fuori stagione
+    assert.deepStrictEqual(Object.keys(s.persons['1'].corso[2026]), ['2026-11']);
+  });
+  t('corsisti: la ricevuta "iscrizione al corso" segna l\'iscrizione e non tocca la tessera', () => {
+    const s = mk(); const key = '2_2026-01-10';
+    S.updateMemberships(s, [key], { printed: false });
+    S.commitPrint(s, [{ key, no: 60, label: 'C60', quota: '80', method: 'Contanti', date: '2026-10-20', tipo: 'corso', periodo: '2026' }], 61);
+    const pay = C.getPay(s.persons['2'], 2026, 'iscrizione');
+    assert.deepStrictEqual([pay.status, pay.no], ['pagato', 60]);
+    assert.strictEqual(s.memberships[key].printed, false);                 // la tessera resta da stampare
+    assert.strictEqual(s.receipts[0].tipo, 'corso');
+    assert.strictEqual(s.receipts[0].periodo, '2026');
+    S.commitPrint(s, [{ key, no: 61, label: 'C61', quota: '', method: '', date: '2027-02-02', tipo: 'corso' }], 62);   // senza stagione: la ricava dalla data
+    assert.ok(C.getPay(s.persons['2'], 2026, 'iscrizione'));
+  });
+  t('corsisti: chi è nel cestino sparisce dal calendario; si ripristina con i pagamenti', () => {
+    const s = mk(); C.setPay(s, '1', 2026, '2026-11', 'pagato');
+    P.deletePerson(s, '1');
+    assert.ok(!C.items(s, 2026, '2026-10-09').some((x) => x.personId === '1'));
+    P.restorePerson(s, '1');
+    assert.strictEqual(get(C.items(s, 2026, '2026-10-09'), '1', '2026-11').status, 'pagato');
+  });
+  t('corsisti: flag dal modulo di inserimento/modifica e rilettura del CSV', () => {
+    const s = S.emptyState();
+    const { personId, key } = P.createPerson(s, { nome: 'Eva', cognome: 'Blu', corsista: true }, { today: '2026-10-09' });
+    assert.strictEqual(s.persons[personId].corsista, true);
+    assert.ok(P.editPerson(s, personId, { nome: 'Eva', cognome: 'Blu', corsista: false, scadenza: s.memberships[key].scadenza, stato: 'Attivo' }, key, { today: '2026-10-09' }).changed.includes('corsista'));
+    assert.strictEqual(s.persons[personId].corsista, false);
+    const s2 = mk(); S.importRecords(s2, [rec('1', 'Anna', 'Rossi')], {});
+    assert.strictEqual(s2.persons['1'].corsista, true);                    // il CSV non conosce il flag e non lo cancella
+  });
+  t('corsisti: impostazione dell\'importo del corso e backup con i nuovi dati', () => {
+    const s = mk(); S.saveSettings(s, { ...s.settings, defaultIscrizioneCorso: ' 80 ' });
+    assert.strictEqual(s.settings.defaultIscrizioneCorso, '80');
+    C.setPay(s, '1', 2026, '2026-11', 'pagato'); C.setPay(s, '1', 2026, 'iscrizione', 'nondovuto');
+    const bk = B.makeBackup(s, '1.5.0');
+    assert.ok(B.verifyBackup(JSON.parse(JSON.stringify(bk))).ok);
+    const bad = (fn) => { const x = JSON.parse(JSON.stringify(bk)); fn(x.data); x.sha256 = B.sha256(JSON.stringify(x.data)); return B.verifyBackup(x); };
+    assert.ok(!bad((d) => { d.persons['1'].corso[2026]['2026-10'] = { status: 'pagato' }; }).ok);
+    assert.ok(!bad((d) => { d.persons['1'].corso[2026]['2026-11'].status = 'boh'; }).ok);
+    assert.ok(!bad((d) => { d.persons['1'].corsista = 'si'; }).ok);
+    assert.ok(!bad((d) => { d.persons['1'].corso = [1]; }).ok);
+    const old = JSON.parse(JSON.stringify(bk)); delete old.data.persons['1'].corso; delete old.data.persons['1'].corsista; old.sha256 = B.sha256(JSON.stringify(old.data));
+    assert.ok(B.verifyBackup(old).ok);
+  });
+}
+
 // ---- Ricerca del CSV nella cartella Download ----
 {
   const os = require('os');
