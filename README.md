@@ -19,7 +19,11 @@ I dati restano solo sul computer.
    (si può tornare ai dati di Younity dalla scheda). L'eliminazione sposta il tesserato nel **Cestino** (Impostazioni): la lettura del CSV non lo fa tornare finché è lì.
 6. **Tipo di ricevuta**: *iscrizione annuale* (numero legato alla tessera, una ristampa lo mantiene) oppure *retta mensile* (con il mese; ogni stampa ha un numero nuovo
    e la tessera non cambia). Tutte le ricevute emesse sono elencate nella scheda del tesserato.
-7. **Calendario**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
+7. **Corsisti** (casella *Corsista* nella scheda): compaiono nel **Calendario corsisti**, con la stagione da novembre a maggio.
+   La rata mensile scade il **1° di ogni mese**; a novembre c'è anche l'**iscrizione al corso** (tipo di ricevuta a parte, con importo predefinito in Impostazioni).
+   Si segna *pagato* a mano (vista Mese o Stagione) oppure in automatico stampando la ricevuta della retta del mese o dell'iscrizione al corso.
+   Colori: verde pagato, rosso scaduto non pagato, arancione/giallo in arrivo, grigio più avanti, tratteggiato non dovuto.
+8. **Calendario tesserati**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
    (soglie modificabili). L'occhio barrato rimuove una tessera dal calendario (resta nell'archivio).
 
 ## Sviluppo

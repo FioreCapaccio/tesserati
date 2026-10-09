@@ -86,7 +86,7 @@ function createPerson(state, input, { force = false, now = new Date(), today = l
   if (duplicates.length && !force) return { duplicates };
   const id = nextManualId(state), stamp = now.toISOString(), key = mKey(id, t.iscrizione);
   const { professione, ...anagrafica } = c;
-  state.persons[id] = Object.assign({ id, addedAt: stamp, note: '', professione, manual: true }, anagrafica);
+  state.persons[id] = Object.assign({ id, addedAt: stamp, note: '', professione, manual: true, corsista: !!input.corsista }, anagrafica);
   state.memberships[key] = {
     key, personId: id, iscrizione: t.iscrizione, iscrizioneOra: '', scadenza: t.scadenza, stato: t.stato,
     printed: false, printedAt: null, receiptNo: null, receiptLabel: '', quota: '', paymentMethod: '', hidden: false, addedAt: stamp, manual: true,
@@ -116,6 +116,7 @@ function editPerson(state, personId, input, key, { today = localToday() } = {}) 
     m[f] = t[f]; changed.push(f);
     if (!m.manual) m.overrides = Object.assign({}, m.overrides, { [f]: true });
   }
+  if ('corsista' in input && !!input.corsista !== !!p.corsista) { p.corsista = !!input.corsista; changed.push('corsista'); }
   let newKey = key;
   if (m.manual && t.iscrizione !== m.iscrizione) {
     newKey = mKey(personId, t.iscrizione);

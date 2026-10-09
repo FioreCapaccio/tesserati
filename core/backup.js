@@ -38,6 +38,17 @@ function checkStructure(data) {
     if (m.printed && m.receiptNo != null && !Number.isInteger(m.receiptNo)) add(`Tessera ${key}: numero ricevuta non valido.`);
   }
   for (const [id, p] of Object.entries(data.persons)) if (p && p.professione != null && typeof p.professione !== 'string') add(`Anagrafica ${id}: professione non valida.`);
+  for (const [id, p] of Object.entries(data.persons)) {
+    if (!p) continue;
+    if (p.corsista != null && typeof p.corsista !== 'boolean') add(`Anagrafica ${id}: indicazione corsista non valida.`);
+    if (p.corso == null) continue;
+    if (typeof p.corso !== 'object' || Array.isArray(p.corso)) { add(`Anagrafica ${id}: pagamenti del corso non validi.`); continue; }
+    for (const [y, slots] of Object.entries(p.corso)) {
+      if (!/^\d{4}$/.test(y) || !slots || typeof slots !== 'object') { add(`Anagrafica ${id}: stagione ${y} non valida.`); continue; }
+      const ok = ['iscrizione', ...[11, 12].map((m) => `${y}-${m}`), ...[1, 2, 3, 4, 5].map((m) => `${Number(y) + 1}-0${m}`)];
+      for (const [slot, v] of Object.entries(slots)) if (!ok.includes(slot) || !v || !['pagato', 'nondovuto'].includes(v.status)) add(`Anagrafica ${id}: pagamento del corso ${y}/${slot} non valido.`);
+    }
+  }
   for (const [id, p] of Object.entries(data.persons)) if (p && p.noEmail != null && typeof p.noEmail !== 'boolean') add(`Anagrafica ${id}: esclusione email non valida.`);
   for (const [key, m] of Object.entries(data.memberships)) {
     const r = m && m.reminders;
@@ -55,7 +66,7 @@ function checkStructure(data) {
   if (data.receipts != null) {
     if (!Array.isArray(data.receipts)) add('Registro delle ricevute non valido.');
     else data.receipts.forEach((r, i) => {
-      if (!r || !Number.isInteger(r.no) || !['annuale', 'mensile'].includes(r.tipo)) add(`Registro ricevute, voce ${i + 1}: non valida.`);
+      if (!r || !Number.isInteger(r.no) || !['annuale', 'mensile', 'corso'].includes(r.tipo)) add(`Registro ricevute, voce ${i + 1}: non valida.`);
       else if (r.tipo === 'mensile' && r.periodo && !/^\d{4}-(0[1-9]|1[0-2])$/.test(r.periodo)) add(`Registro ricevute, voce ${i + 1}: mese non valido.`);
     });
   }

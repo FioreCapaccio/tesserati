@@ -8,6 +8,7 @@ const S = require('./core/store');
 const B = require('./core/backup');
 const R = require('./core/reminders');
 const P = require('./core/people');
+const C = require('./core/corsi');
 const M = require('./core/mailer');
 
 const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
@@ -90,6 +91,7 @@ const fakeMailFile = process.env.TESSERATI_SMOKE ? process.env.TESSERATI_MAIL_FA
 const fakeTransport = () => ({ sendMail: async (o) => { fs.appendFileSync(fakeMailFile, JSON.stringify(o) + '\n'); }, close() {} });
 
 const snapshot = () => ({ state, dataFile, version: app.getVersion(), copyright: COPYRIGHT, csv: resolveCsv(), defaultDataFile: path.join(app.getPath('userData'), DATA_NAME), warning: startupWarning,
+  corsi: { overdue: C.overdueCount(state, localIso()) },
   mail: { hasSecret: hasSecret() || !!fakeMailFile, canEncrypt: safeStorage.isEncryptionAvailable(), dueCount: R.dueReminders(state, localIso()).groups.length } });
 
 // ---------- Finestra ----------
@@ -254,6 +256,19 @@ handle('archive:change', async ({ reset }) => {
   fs.writeFileSync(locFile(), JSON.stringify({ dataDir: reset ? '' : dir }));
   startupWarning = '';
   return { moved: true, useExisting, from: oldFile, ...snapshot() };
+});
+
+// ---------- Calendario corsisti ----------
+handle('corsi:data', ({ season } = {}) => {
+  const today = localIso();
+  const cur = C.seasonOfDate(today);
+  const y = Number.isInteger(season) ? season : cur;
+  return { today, season: y, currentSeason: cur, label: C.seasonLabel(y), start: C.seasonStart(y), end: C.seasonEnd(y), phase: C.seasonPhase(y, today), daysToStart: C.seasonPhase(y, today) === 'prossima' ? require('./core/reminders').daysBetween(today, C.seasonStart(y)) : 0, months: C.seasonMonths(y), items: C.items(state, y, today) };
+});
+handle('corsi:set', ({ entries, status }) => {
+  for (const e of entries || []) C.setPay(state, e.personId, e.season, e.slot, status, { manual: true });
+  saveState();
+  return snapshot();
 });
 
 // ---------- Inserimento, modifica ed eliminazione manuale ----------

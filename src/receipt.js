@@ -18,7 +18,12 @@
     const m = /^(\d{4})-(\d{2})$/.exec(p || '');
     return m && MESI[Number(m[2]) - 1] ? `${MESI[Number(m[2]) - 1]} ${m[1]}` : '';
   }
+  function seasonLabel(y) {
+    const n = Number(y);
+    return /^\d{4}$/.test(String(y)) ? `${n}/${String((n + 1) % 100).padStart(2, '0')}` : '';
+  }
   function causale(tipo, periodo) {
+    if (tipo === 'corso') { const s = seasonLabel(periodo); return s ? `Iscrizione al corso ${s}` : 'Iscrizione al corso'; }
     if (tipo !== 'mensile') return 'Quota di iscrizione annuale';
     const mese = periodLabel(periodo);
     return mese ? `Retta mensile – ${mese}` : 'Retta mensile';
@@ -32,6 +37,7 @@
     if (!item) return '<div class="cell"></div>';
     const { p, m, label, quota, date, method, tipo, periodo } = item;
     const mensile = tipo === 'mensile';
+    const corso = tipo === 'corso';
     const q = formatQuota(quota);
     const nasc = [fmtDate(p.nascita), p.provNascita ? `(${p.provNascita})` : p.cf && /Z\d{3}/.test(p.cf.slice(11, 15)) ? '(estero)' : ''].filter(Boolean).join(' ');
     const resid = [p.indirizzo, p.citta].filter(Boolean).join(' – ');
@@ -46,7 +52,7 @@
     return `
     <div class="cell">
       ${head}
-      <div class="title"><span>${mensile ? 'Ricevuta retta mensile' : 'Ricevuta di tesseramento'}</span><b>N° ${esc(label)}</b></div>
+      <div class="title"><span>${mensile ? 'Ricevuta retta mensile' : corso ? 'Ricevuta iscrizione al corso' : 'Ricevuta di tesseramento'}</span><b>N° ${esc(label)}</b></div>
       <div class="date">del ${esc(fmtDate(date))}</div>
       <div class="rows">
         <div class="r causale"><span class="l">Causale</span><span class="v">${esc(causale(tipo, periodo))}</span></div>
@@ -61,7 +67,7 @@
         ${row('Scadenza', fmtDate(m.scadenza))}
         ${row('Stato', m.stato)}
       </div>
-      <div class="quota"><span>${mensile ? 'Retta versata' : 'Quota associativa versata'}</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
+      <div class="quota"><span>${mensile ? 'Retta versata' : corso ? 'Quota di iscrizione versata' : 'Quota associativa versata'}</span><b>${q ? esc(q) : '€ <i class="line"></i>'}</b></div>
       <div class="pay"><span class="l2">Metodo di pagamento</span>${method ? `<b>${esc(method)}</b>` : ['Contanti', 'POS', 'Bonifico'].map((x) => `<span class="opt"><i class="box"></i>${x}</span>`).join('')}</div>
       <div class="foot">
         <div class="sig"><i></i><span>Firma per l’associazione</span></div>
@@ -115,5 +121,5 @@
     return `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Ricevute</title><style>${CSS}${preview ? PREVIEW_CSS : ''}</style></head><body>${body}</body></html>`;
   }
 
-  window.Receipt = { build, formatQuota, esc, periodLabel, causale };
+  window.Receipt = { build, formatQuota, esc, periodLabel, causale, seasonLabel };
 })();
