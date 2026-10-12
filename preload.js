@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   restorePerson: (id) => call('person:restore', id),
   purgeTrash: (id) => call('person:purge', id),
   resetOverrides: (id) => call('person:reset-overrides', id),
+  dashboardData: () => call('dashboard:data'),
   corsiData: (season) => call('corsi:data', { season }),
   corsiSet: (entries, status) => call('corsi:set', { entries, status }),
   quit: () => call('app:quit'),

@@ -5,6 +5,9 @@ elenco, scheda di dettaglio, ricevute (4 per foglio A4), calendario delle scaden
 I dati restano solo sul computer.
 
 ## Uso
+0. **Dashboard** (la prima pagina all'apertura): tessere valide, scadute, in scadenza e sospese, corsisti, nuovi tesserati, ricevute da stampare;
+   l'elenco *Da fare* con un clic per aprire la schermata giusta; grafici delle iscrizioni e delle scadenze, età, città, corsisti e incassi dell'anno
+   (somma degli importi scritti sulle ricevute). Valida = stato Attivo e non scaduta; le sospese sono contate a parte.
 1. **Impostazioni**: inserisci nome, indirizzo, C.F., logo dell'associazione e il prossimo numero di ricevuta.
 2. **Rileggi file**: l'app cerca in **Download** il file `Younity…csv` più recente (cartella o file modificabili in Impostazioni).
    Il primo caricamento segna le tessere come *già stampate*; dalle letture successive risultano **Da stampare** solo i tesserati nuovi (o i rinnovi).
@@ -17,13 +20,17 @@ I dati restano solo sul computer.
 5. **Inserire, modificare, eliminare** un tesserato (scheda → *Modifica dati* / *Elimina tesserato*, pulsante *Nuovo tesserato* nell'elenco):
    gli inseriti a mano hanno ID `M001`, `M002`… e la tessera risulta *da stampare*. I dati del CSV modificati a mano **restano tali** anche dopo *Rileggi file*
    (si può tornare ai dati di Younity dalla scheda). L'eliminazione sposta il tesserato nel **Cestino** (Impostazioni): la lettura del CSV non lo fa tornare finché è lì.
-6. **Tipo di ricevuta**: *Tessera associativa* (la quota annuale dell'associazione: il numero è legato alla tessera e una ristampa lo mantiene) oppure *Corso*
+6. **Data e numero della ricevuta**: ogni ricevuta ha la sua data e il suo numero. I numeri si ricalcolano **subito** in ordine di data (la più vecchia prende il numero più basso)
+   partendo da *Primo numero*; si possono scrivere a mano (il numero scritto resta fermo e gli altri lo saltano) e *Ricalcola tutto* riporta l'automatico.
+   Se un numero è già assegnato, se l'ordine non è cronologico rispetto alle ricevute già emesse o se la data è precedente al pagamento, la riga lo segnala e la stampa chiede conferma.
+   Una ristampa della tessera tiene numero e data originali.
+7. **Tipo di ricevuta**: *Tessera associativa* (la quota annuale dell'associazione: il numero è legato alla tessera e una ristampa lo mantiene) oppure *Corso*
    (per i corsisti: *rata mensile*, con il mese, oppure *iscrizione al corso* di novembre; ogni stampa ha un numero nuovo e la tessera non cambia).
-7. **Corsisti** (casella *Corsista* nella scheda): compaiono nel **Calendario corsisti**, con la stagione da novembre a maggio.
+8. **Corsisti** (casella *Corsista* nella scheda): compaiono nel **Calendario corsisti**, con la stagione da novembre a maggio.
    La rata mensile scade il **1° di ogni mese**; a novembre c'è anche l'**iscrizione al corso** (importo predefinito in Impostazioni).
    Si segna *pagato* a mano (vista Mese o Stagione) oppure in automatico stampando la ricevuta *Corso* (rata del mese o iscrizione).
    Colori: verde pagato, rosso scaduto non pagato, arancione/giallo in arrivo, grigio più avanti, tratteggiato non dovuto.
-8. **Calendario tesserati**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
+9. **Calendario tesserati**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
    (soglie modificabili). L'occhio barrato rimuove una tessera dal calendario (resta nell'archivio).
 
 ## Sviluppo

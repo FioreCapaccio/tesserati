@@ -9,6 +9,7 @@ const B = require('./core/backup');
 const R = require('./core/reminders');
 const P = require('./core/people');
 const C = require('./core/corsi');
+const D = require('./core/stats');
 const M = require('./core/mailer');
 
 const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
@@ -257,6 +258,8 @@ handle('archive:change', async ({ reset }) => {
   startupWarning = '';
   return { moved: true, useExisting, from: oldFile, ...snapshot() };
 });
+
+handle('dashboard:data', () => D.dashboard(state, localIso()));
 
 // ---------- Calendario corsisti ----------
 handle('corsi:data', ({ season } = {}) => {
