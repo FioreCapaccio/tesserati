@@ -20,6 +20,7 @@ const ICON = {
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3M12 9v9M17 12v6"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>',
@@ -43,13 +44,14 @@ function toast(msg) {
 // ======================= Stato =======================
 const App = {
   data: null, dataFile: '',
-  view: 'lista',
+  view: 'dashboard',
   sel: new Set(),
   detailKey: null,
   filters: { q: '', stato: '', scad: '', stampa: '', latestOnly: true },
   sort: { key: 'cognome', dir: 1 },
   cal: { y: new Date().getFullYear(), m: new Date().getMonth(), mode: 'mese', day: null, showHidden: false },
   busy: false,
+  dash: null, dashLoading: false,
   corsi: null, csLoading: false, cs: { season: null, mode: 'mese', mi: null, sel: new Set() },
   avvisi: null, avSel: new Set(), avKnown: new Set(), avLoading: false,
 };
@@ -58,6 +60,7 @@ function setData(snap) {
   App.data = snap.state;
   for (const k of ['dataFile', 'version', 'copyright', 'csv', 'defaultDataFile', 'mail', 'corsi']) if (snap[k] !== undefined) (k === 'corsi' ? (App.corsiInfo = snap[k]) : (App[k] = snap[k]));
   App.corsi = null; // i dati del calendario corsisti si ricalcolano alla prossima apertura
+  App.dash = null;
   App.avvisi = null; // i dati degli avvisi si ricalcolano alla prossima apertura
 }
 const S = () => App.data.settings;
@@ -104,6 +107,7 @@ function renderSide() {
   const last = App.data.imports[App.data.imports.length - 1];
   $('#side').innerHTML = `
     <div class="brand"><img src="brand.png" alt="" width="40" height="40"><span>AROTRON</span></div>
+    ${item('dashboard', 'chart', 'Dashboard')}
     ${item('lista', 'users', 'Tesserati')}
     ${item('stampare', 'print', 'Da stampare', todo.length)}
     ${item('calendario', 'cal', 'Calendario tesserati')}
@@ -128,6 +132,7 @@ function render() {
   else if (App.view === 'calendario') body = calendarView();
   else if (App.view === 'avvisi') body = avvisiView();
   else if (App.view === 'corsisti') body = corsistiView();
+  else if (App.view === 'dashboard') body = dashboardView();
   else body = settingsView();
   main.innerHTML = `<div class="view">${body}</div><footer class="app-foot">Tesserati · versione ${esc(App.version || '')} · ${esc(App.copyright || '')}</footer>`;
   main.scrollTop = scroll;
@@ -399,6 +404,88 @@ function yearGrid(rows) {
       <div class="pills">${Object.entries(cnt).filter(([, n]) => n).map(([k, n]) => `<span class="chip ${k}" style="width:auto;display:inline-block;cursor:pointer">${n}</span>`).join('') || '<span style="color:var(--muted)">—</span>'}</div>
       <div class="tot">${list.length} scadenz${list.length === 1 ? 'a' : 'e'}</div></button>`;
   }).join('')}</div>`;
+}
+
+// ======================= Dashboard =======================
+async function loadDash() {
+  if (App.dashLoading) return;
+  App.dashLoading = true;
+  try { App.dash = await window.api.dashboardData(); }
+  catch (e) { toast('Errore: ' + e.message); App.dash = null; }
+  finally { App.dashLoading = false; if (App.view === 'dashboard' && App.dash) render(); }
+}
+const nfmt = (n) => Number(n).toLocaleString('it-IT');
+const eur = (n) => Number(n).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+const ymLabel = (ym) => `${MONTHS[Number(ym.slice(5, 7)) - 1].slice(0, 3)}${ym.slice(5, 7) === '01' ? ' ' + ym.slice(2, 4) : ''}`;
+const ymFull = (ym) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+
+function dTile(cls, label, value, sub, attrs) {
+  return `<${attrs ? 'button' : 'div'} class="tile ${cls}" ${attrs || ''}><span class="tl">${label}</span><span class="tv">${nfmt(value)}</span><span class="ts">${sub}</span></${attrs ? 'button' : 'div'}>`;
+}
+// Grafico a colonne: una sola serie, valori scritti sopra le barre, tooltip con il dettaglio.
+function dCols(rows, unit) {
+  const max = Math.max(1, ...rows.map((r) => r.n));
+  return `<div class="cols" role="img" aria-label="Grafico a colonne: ${rows.map((r) => `${ymFull(r.ym)} ${r.n}`).join(', ')}">${rows.map((r) => `<div class="col" title="${esc(ymFull(r.ym))}: ${r.n} ${unit}"><span class="cv">${r.n || ''}</span><span class="cb" style="height:${r.n ? Math.max(4, Math.round((r.n / max) * 100)) : 0}%"></span><span class="cl">${esc(ymLabel(r.ym))}</span></div>`).join('')}</div>`;
+}
+// Barre orizzontali con etichetta e valore a destra.
+function dBars(rows, fmtv) {
+  const max = Math.max(1, ...rows.map((r) => r.v));
+  return `<div class="hbars">${rows.map((r) => `<div class="hb" title="${esc(r.l)}: ${esc(fmtv ? fmtv(r.v) : nfmt(r.v))}"><span class="hl">${esc(r.l)}</span><span class="ht"><span class="hf" style="width:${r.v ? Math.max(2, Math.round((r.v / max) * 100)) : 0}%"></span></span><span class="hv">${esc(fmtv ? fmtv(r.v) : nfmt(r.v))}</span></div>`).join('')}</div>`;
+}
+
+function dashboardView() {
+  if (!App.dash) { loadDash(); return '<div class="page-head"><div><h1>Dashboard</h1><p>Calcolo in corso…</p></div></div>'; }
+  const d = App.dash, t = d.tessere, c = d.corsisti, r = d.ricevute;
+  const oggi = new Date(d.today + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const go = (view, extra = '') => `data-act="dash-go" data-view="${view}" ${extra}`;
+  const tiles = [
+    dTile('ok', 'Tessere valide', t.valide, `su ${nfmt(t.totale)} tesserati`, go('lista')),
+    dTile('expired', 'Tessere scadute', t.scadute, `${nfmt(t.scadute30)} negli ultimi 30 giorni`, go('lista', 'data-filtro="expired"')),
+    dTile('soon', 'In scadenza', t.inScadenza, `entro ${d.soonDays} giorni`, go('lista', 'data-filtro="soon"')),
+    dTile('neutral', 'Sospese', t.sospese, 'stato “Sospeso” in Younity', go('lista', 'data-stato="Sospeso"')),
+    dTile('accent', 'Corsisti', c.totale, `stagione ${esc(c.label)}`, go('corsisti')),
+    dTile('accent', 'Nuovi tesserati', d.nuovi30, `negli ultimi 30 giorni · ${nfmt(d.rinnovi30)} rinnovi`, go('lista')),
+    dTile('accent', 'Ricevute da stampare', r.daStampare, `prossimo numero: ${esc(String(r.prossimoNumero))}`, go('stampare')),
+    dTile('neutral', 'Minorenni', d.eta.minorenni, d.eta.media != null ? `età media ${d.eta.media} anni` : '—', go('lista')),
+  ].join('');
+  const todo = d.attenzione.length
+    ? `<div class="todo">${d.attenzione.map((x) => `<button class="todo-row" ${go(x.view, x.filtro ? `data-filtro="${x.filtro}"` : '')}><b>${nfmt(x.n)}</b><span>${esc(x.testo)}</span><span class="go">Apri →</span></button>`).join('')}</div>`
+    : '<p class="allok"><span class="badge ok">✓</span> Tutto in ordine: nessuna azione richiesta.</p>';
+  const segs = [['ok', 'Pagati', c.pagati], ['expired', 'Scaduti non pagati', c.scaduti], ['soon', `Da pagare entro ${d.soonDays} gg`, c.inScadenza], ['warn', 'Più avanti', c.dopo], ['skip', 'Non dovuti', c.nonDovuti]];
+  const totSeg = segs.reduce((a, x) => a + x[2], 0);
+  const corsiCard = c.totale
+    ? `<div class="stack" role="img" aria-label="Pagamenti dei corsisti: ${segs.map((x) => `${x[1]} ${x[2]}`).join(', ')}">${segs.filter((x) => x[2]).map((x) => `<span class="seg ${x[0]}" style="flex:${x[2]}" title="${esc(x[1])}: ${x[2]}"></span>`).join('')}</div>
+       <ul class="legendl">${segs.map((x) => `<li><span class="sw ${x[0]}"></span>${esc(x[1])} <b>${x[2]}</b></li>`).join('')}</ul>
+       <p class="dsub">Stagione ${esc(c.label)}: ${c.phase === 'incorso' ? 'in corso' : c.phase === 'prossima' ? 'non ancora iniziata (1° novembre)' : 'conclusa'} · ${nfmt(totSeg)} scadenze in tutto.${c.prossima ? ` Prossima scadenza: <b>${new Date(c.prossima.due + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}</b> (${c.prossima.days === 0 ? 'oggi' : 'tra ' + c.prossima.days + ' gg'}), ${c.prossima.n} pagament${c.prossima.n === 1 ? 'o' : 'i'}.` : ''}</p>
+       <button class="btn sm" ${go('corsisti')}>Apri il Calendario corsisti</button>`
+    : '<p class="dsub">Nessun corsista. Spunta “Corsista” nella scheda di un tesserato per vederlo nel Calendario corsisti.</p>';
+  const incassi = r.emesse
+    ? `<div class="bigfig">${eur(r.totale)}</div><p class="dsub" style="margin-top:0">incassi del ${esc(r.anno)} · ${nfmt(r.emesse)} ricevute emesse</p>
+       ${dBars(r.perTipo.filter((x) => x.n).map((x) => ({ l: `${x.nome} (${x.n})`, v: x.importo })), eur)}
+       ${r.perMetodo.length ? `<h4>Per metodo di pagamento</h4>${dBars(r.perMetodo.map((x) => ({ l: x.metodo, v: x.importo })), eur)}` : ''}
+       <p class="dsub">Somma degli importi scritti sulle ricevute${r.senzaImporto ? `: ${r.senzaImporto} ricevut${r.senzaImporto === 1 ? 'a' : 'e'} senza importo non ${r.senzaImporto === 1 ? 'è inclusa' : 'sono incluse'}` : ''}.</p>`
+    : `<p class="dsub">Nessuna ricevuta emessa nel ${esc(r.anno)}.</p>`;
+  const ult = d.archivio.ultimaLettura;
+  return `
+    <div class="page-head"><div><h1>Dashboard</h1><p class="cap">${esc(oggi)}</p></div>
+      <button class="btn" data-act="dash-refresh">${ICON.sync} Aggiorna</button></div>
+    <div class="tiles">${tiles}</div>
+    <section class="dcard wide"><h2>Da fare</h2>${todo}</section>
+    <div class="dgrid">
+      <section class="dcard"><h2>Tessere registrate per mese</h2><p class="dsub">Iscrizioni e rinnovi degli ultimi 12 mesi.</p>${dCols(d.iscrizioniPerMese, 'tessere')}</section>
+      <section class="dcard"><h2>Scadenze dei prossimi 6 mesi</h2><p class="dsub">Tessere valide, in base alla data di scadenza.</p>${dCols(d.scadenzePerMese, 'scadenze')}</section>
+      <section class="dcard"><h2>Corsisti</h2>${corsiCard}</section>
+      <section class="dcard"><h2>Incassi e ricevute</h2>${incassi}</section>
+      <section class="dcard"><h2>Età dei tesserati</h2>${dBars(d.eta.fasce.map((x) => ({ l: x.label, v: x.n })))}</section>
+      <section class="dcard"><h2>Città di residenza</h2>${d.topCitta.length ? dBars(d.topCitta.map((x) => ({ l: x.nome, v: x.n }))) : '<p class="dsub">Nessun dato.</p>'}<p class="dsub">Le prime ${d.topCitta.length} per numero di tesserati.</p></section>
+    </div>
+    <section class="dcard wide"><h2>Altre notizie</h2><dl class="kv kv-wide">
+      <dt>Nuovi da gennaio</dt><dd>${nfmt(d.nuoviAnno)} tesserati</dd>
+      <dt>Tessere entro ${d.warnDays} giorni</dt><dd>${nfmt(t.entroWarn)} in scadenza</dd>
+      <dt>Senza email valida</dt><dd>${nfmt(d.senzaEmail)} tesserati</dd>
+      <dt>Avvisi email</dt><dd>${nfmt(d.avvisi.pronti)} pronti da inviare · ${nfmt(d.avvisi.inviati30)} inviati negli ultimi 30 giorni</dd>
+      <dt>Ultima lettura del file</dt><dd>${ult ? `${new Date(ult.at).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short' })} · ${nfmt(ult.nuovi)} nuove tessere` : 'mai'}</dd>
+      <dt>Cestino</dt><dd>${nfmt(d.archivio.cestino)} tesserati eliminati</dd></dl></section>`;
 }
 
 // ======================= Calendario corsisti =======================
@@ -768,6 +855,7 @@ const ledgerTipo = (st) => (st.tipo === 'annuale' ? 'annuale' : st.voce === 'isc
 
 // keys: tessere da stampare. opts.rows: [{ key, tipo: 'annuale'|'corso', voce: 'rata'|'iscrizione' }] per avere più ricevute della stessa
 // persona (es. rata + iscrizione di novembre); opts.periodo: mese della rata (YYYY-MM).
+// Ogni ricevuta ha la sua data e il suo numero: i numeri si ricalcolano in tempo reale in ordine di data e si possono scrivere a mano.
 function openPrintDialog(keys, opts = {}) {
   const { rows } = derive();
   const map = new Map(rows.map((r) => [r.m.key, r]));
@@ -785,25 +873,43 @@ function openPrintDialog(keys, opts = {}) {
   if (!items.length) return;
   const pages = Math.ceil(items.length / 4);
   const touched = { quota: false };
+  const issued = Numbering.issuedList(App.data);
+  const issuedNos = new Set(issued.map((x) => x.no));
+  const today = todayIso();
+  const localDate = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   // Valori per singola ricevuta: per la tessera partono da quelli salvati sulla tessera, altrimenti dai predefiniti.
   const row = {};
   const quotaFor = (st) => (touched.quota && st.tipo === top.tipo && (st.tipo === 'annuale' || st.voce === top.voce) ? $('#p-quota').value : defQuotaFor(st));
   items.forEach((it) => {
-    const tipo = it.fixed || top.tipo, voce = it.fixedVoce || top.voce, own = tipo === 'annuale';
-    const st = { tipo, voce, quota: '', method: (own && it.r.m.paymentMethod) || s.defaultPayment, qT: own && !!it.r.m.quota, mT: own && !!it.r.m.paymentMethod, tT: !!it.fixed, vT: !!it.fixedVoce };
-    st.quota = (own && it.r.m.quota) || defQuotaFor(st);
+    const tipo = it.fixed || top.tipo, voce = it.fixedVoce || top.voce, own = tipo === 'annuale', m = it.r.m;
+    const reuse = own && !!m.receiptNo;
+    const st = { tipo, voce, quota: '', method: (own && m.paymentMethod) || s.defaultPayment, qT: own && !!m.quota, mT: own && !!m.paymentMethod, tT: !!it.fixed, vT: !!it.fixedVoce,
+      date: (reuse && m.receiptDate) || today, dT: reuse && !!m.receiptDate, no: null, nT: false, reuse };
+    st.quota = (own && m.quota) || defQuotaFor(st);
     row[it.id] = st;
   });
   const el = (kind, id) => document.querySelector(`[data-${kind}="${CSS.escape(id)}"]`);
+  const ledgerOf = (st) => ledgerTipo(st);
+  const reuseOf = (it, st) => ledgerOf(st) === 'annuale' && !!it.r.m.receiptNo;
+  // Data del pagamento, se la conosciamo: iscrizione della tessera, oppure il giorno in cui il pagamento del corso è stato segnato.
+  const payDateOf = (it, st, periodo) => {
+    const lt = ledgerOf(st), m = it.r.m, p = it.r.p;
+    if (lt === 'annuale') return reuseOf(it, st) ? null : m.iscrizione || null;
+    const per = lt === 'mensile' ? periodo : null;
+    const y = lt === 'mensile' ? (Number(per.slice(5, 7)) >= 11 ? Number(per.slice(0, 4)) : Number(per.slice(5, 7)) <= 5 ? Number(per.slice(0, 4)) - 1 : null) : seasonOfDate(st.date);
+    const pay = y != null && p.corso && p.corso[y] ? p.corso[y][lt === 'mensile' ? per : 'iscrizione'] : null;
+    return pay && pay.status === 'pagato' && pay.at ? localDate(pay.at) : null;
+  };
   openModal(`<div class="modal big" role="dialog" aria-modal="true" aria-labelledby="mt">
     <header><h2 id="mt">Stampa ricevute</h2></header>
     <div class="mbody"><div class="print-grid">
       <div class="ctl">
         <div><b>${items.length}</b> ricevut${items.length === 1 ? 'a' : 'e'} · <b>${pages}</b> foglio${pages === 1 ? '' : 'i'} A4 (4 per foglio)</div>
         <div class="two">
-          <label>Data della ricevuta<input class="field" type="date" id="p-date" value="${todayIso()}"></label>
+          <label>Data per tutte<input class="field" type="date" id="p-date" value="${today}"></label>
           <label>Primo numero<input class="field" type="number" min="1" id="p-start" value="${s.nextReceipt}"></label>
         </div>
+        <div class="hint" style="margin-top:-6px">I numeri seguono l’<b>ordine delle date</b> e si ricalcolano subito quando cambi una data. Ogni ricevuta ha la sua data e il suo numero: puoi scriverli a mano (il numero scritto a mano resta fermo). <button class="linkbtn" id="p-recalc" type="button">Ricalcola tutto in automatico</button></div>
         <label>Tipo di ricevuta<select class="field" id="p-tipo">${optList(TIPI, top.tipo)}</select></label>
         <label id="p-voce-w" hidden>Per il corso<select class="field" id="p-voce">${optList(VOCI, top.voce)}</select></label>
         <label id="p-per" hidden>Mese della rata<input class="field" type="month" id="p-periodo" value="${opts.periodo || thisMonth()}"></label>
@@ -812,15 +918,19 @@ function openPrintDialog(keys, opts = {}) {
           <label>Quota predefinita (€)<input class="field" id="p-quota" value="${esc(defQuotaFor(top))}" inputmode="decimal" placeholder="a mano"></label>
           <label>Pagamento predefinito<select class="field" id="p-method">${payOptions(s.defaultPayment, 'Da segnare a mano')}</select></label>
         </div>
-        <div class="hint"><b>Tessera associativa</b>: la quota annuale dell’associazione; una ristampa tiene lo stesso numero e la tessera risulta “stampata”. <b>Corso</b>: per chi frequenta i corsi, può essere la rata mensile o l’iscrizione al corso di novembre; ogni stampa prende un numero nuovo, la tessera non cambia e il pagamento viene segnato da solo nel Calendario corsisti. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
+        <div class="hint"><b>Tessera associativa</b>: la quota annuale dell’associazione; una ristampa tiene lo stesso numero e la stessa data. <b>Corso</b>: rata mensile o iscrizione di novembre; ogni stampa prende un numero nuovo, la tessera non cambia e il pagamento viene segnato da solo nel Calendario corsisti. Se quota o pagamento restano vuoti c’è lo spazio da compilare a mano.</div>
         <div class="hint" id="p-range"></div>
+        <div class="pissues" id="p-issues" hidden></div>
         ${s.assoc.nome ? '' : '<div class="hint" style="color:var(--org-tx);background:var(--org-bg);padding:8px 10px;border-radius:8px">Mancano i dati dell’associazione: inseriscili in Impostazioni per averli sulla ricevuta.</div>'}
-        <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento · tipo</span></div>
+        <div class="rowlist-head"><b>Una per una</b><span>quota · pagamento · tipo · data · n°</span></div>
         <div class="rowlist" id="p-rows">${items.map((it) => `<div class="prow"><span class="pn" title="${esc(it.r.p.cognome + ' ' + it.r.p.nome)}">${esc(it.r.p.cognome)} ${esc(it.r.p.nome)}</span>
           <div class="pc"><input class="field" data-rq="${esc(it.id)}" value="${esc(row[it.id].quota)}" inputmode="decimal" placeholder="€" aria-label="Quota ${esc(it.r.p.cognome)}">
           <select class="field" data-rm="${esc(it.id)}" aria-label="Pagamento ${esc(it.r.p.cognome)}">${payOptions(row[it.id].method, '—')}</select>
           <select class="field" data-rt="${esc(it.id)}" aria-label="Tipo ${esc(it.r.p.cognome)}">${optList(TIPI, row[it.id].tipo, true)}</select></div>
-          <select class="field pv" data-rv="${esc(it.id)}" aria-label="Voce del corso ${esc(it.r.p.cognome)}" ${row[it.id].tipo === 'corso' ? '' : 'hidden'}>${optList(VOCI, row[it.id].voce)}</select></div>`).join('')}</div>
+          <select class="field pv" data-rv="${esc(it.id)}" aria-label="Voce del corso ${esc(it.r.p.cognome)}" ${row[it.id].tipo === 'corso' ? '' : 'hidden'}>${optList(VOCI, row[it.id].voce)}</select>
+          <div class="pd"><label>Data<input class="field" type="date" data-rd="${esc(it.id)}" value="${row[it.id].date}" aria-label="Data ricevuta ${esc(it.r.p.cognome)}"></label>
+            <label>N°<input class="field" type="number" min="1" data-rn="${esc(it.id)}" aria-label="Numero ricevuta ${esc(it.r.p.cognome)}"></label></div>
+          <div class="pwarn" data-rw="${esc(it.id)}"></div></div>`).join('')}</div>
       </div>
       <div class="preview" id="pv"></div>
     </div></div>
@@ -828,42 +938,70 @@ function openPrintDialog(keys, opts = {}) {
       <button class="btn" data-act="close-modal">Annulla</button>
       <button class="btn" data-act="do-print" data-mode="pdf">Salva PDF…</button>
       <button class="btn primary" data-act="do-print" data-mode="print">${ICON.print} Stampa</button></footer></div>`, () => {
-    const build = () => {
-      const date = $('#p-date').value || todayIso();
+    let preview;
+    // Numeri e controlli: si ricalcolano a ogni modifica, sul momento.
+    const numbers = () => {
       const periodo = $('#p-periodo').value || thisMonth();
-      const season = String(seasonOfDate(date));
-      let n = Math.max(1, parseInt($('#p-start').value, 10) || 1);
+      const startVal = parseInt($('#p-start').value, 10) || 1;
+      const arows = items.map((it, i) => ({ id: it.id, date: row[it.id].date, order: i, reuseNo: reuseOf(it, row[it.id]) ? it.r.m.receiptNo : null, fixedNo: row[it.id].nT && row[it.id].no ? row[it.id].no : null }));
+      const nos = Numbering.assign(arows, startVal, issuedNos);
+      for (const it of items) {
+        const st = row[it.id];
+        st.reuse = reuseOf(it, st);
+        if (st.reuse) st.no = it.r.m.receiptNo; else if (!st.nT) st.no = nos[it.id];
+        const ni = el('rn', it.id);
+        if (document.activeElement !== ni) ni.value = st.no;
+        ni.disabled = st.reuse; ni.title = st.reuse ? 'Ristampa: il numero resta quello già assegnato' : st.nT ? 'Scritto a mano (resta fermo)' : 'Calcolato in base alla data';
+        ni.classList.toggle('manual', st.nT && !st.reuse);
+        const di = el('rd', it.id);
+        if (document.activeElement !== di) di.value = st.date;
+      }
+      const problems = Numbering.check(items.map((it) => ({ id: it.id, no: row[it.id].no, date: row[it.id].date, reuse: row[it.id].reuse, nome: `${it.r.p.cognome} ${it.r.p.nome}` })), issued);
+      const list = [];
+      for (const it of items) {
+        const st = row[it.id];
+        const msgs = (problems[it.id] || []).slice();
+        const pm = payDateOf(it, st, periodo);
+        if (pm && st.date && st.date < pm) msgs.push({ level: 'warn', text: `La data è precedente al pagamento (${fmt(pm)}): la ricevuta deve essere successiva.` });
+        el('rw', it.id).innerHTML = msgs.map((x) => `<div class="${x.level === 'error' ? 'e' : 'w'}">${x.level === 'error' ? '✕' : '⚠'} ${esc(x.text)}</div>`).join('');
+        msgs.forEach((x) => list.push({ level: x.level, text: `${it.r.p.cognome} ${it.r.p.nome}: ${x.text}` }));
+      }
+      const box = $('#p-issues');
+      box.hidden = !list.length;
+      box.innerHTML = list.length ? `<b>${list.length} ${list.length === 1 ? 'avviso' : 'avvisi'} su date e numeri</b> — puoi stampare comunque, dopo conferma.` : '';
+      return { periodo, list };
+    };
+    const build = () => {
+      const { periodo, list } = numbers();
       const out = [];
-      const receipts = [];
-      let lastNew = null;
+      let maxNew = null;
       for (const it of items) {
         const st = row[it.id], m = it.r.m, lt = ledgerTipo(st);
-        const reuse = lt === 'annuale' && m.receiptNo;      // ristampa della tessera: stesso numero
-        let no = reuse ? m.receiptNo : null;
-        let label = reuse ? m.receiptLabel : '';
-        if (!no) { no = n++; label = s.receiptPrefix + String(no).padStart(s.receiptDigits, '0'); lastNew = no; }
-        const per = lt === 'mensile' ? periodo : lt === 'corso' ? season : '';
-        out.push({ p: it.r.p, m, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: lt, periodo: per });
-        receipts.push({ key: m.key, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date, tipo: lt, periodo: per });
+        const no = st.no;
+        const label = st.reuse ? m.receiptLabel : s.receiptPrefix + String(no).padStart(s.receiptDigits, '0');
+        if (!st.reuse) maxNew = Math.max(maxNew == null ? 0 : maxNew, no);
+        const per = lt === 'mensile' ? periodo : lt === 'corso' ? String(seasonOfDate(st.date)) : '';
+        out.push({ p: it.r.p, m, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date: st.date, tipo: lt, periodo: per });
       }
+      out.sort((x, y) => x.no - y.no || x.date.localeCompare(y.date));       // si stampa in ordine di numero
+      const receipts = out.map((x) => ({ key: x.m.key, no: x.no, label: x.label, quota: x.quota, method: x.method, date: x.date, tipo: x.tipo, periodo: x.periodo }));
       $('#p-voce-w').hidden = top.tipo !== 'corso';
       $('#p-per').hidden = !receipts.some((r) => r.tipo === 'mensile');
       const hasIscr = receipts.some((r) => r.tipo === 'corso');
       $('#p-corso').hidden = !hasIscr;
-      if (hasIscr) $('#p-corso').textContent = `Iscrizione al corso: stagione ${Receipt.seasonLabel(season)} (ricavata dalla data della ricevuta).`;
+      if (hasIscr) $('#p-corso').textContent = `Iscrizione al corso: la stagione si ricava dalla data di ogni ricevuta (${[...new Set(out.filter((x) => x.tipo === 'corso').map((x) => Receipt.seasonLabel(x.periodo)))].join(', ')}).`;
       const nums = receipts.map((x) => x.no);
       $('#p-range').textContent = `Numeri: dal ${s.receiptPrefix}${String(Math.min(...nums)).padStart(s.receiptDigits, '0')} al ${s.receiptPrefix}${String(Math.max(...nums)).padStart(s.receiptDigits, '0')}.`;
       const html = Receipt.build(out, s.assoc);
-      openPrintDialog.current = { html, receipts, nextReceipt: lastNew != null ? lastNew + 1 : NaN };
+      openPrintDialog.current = { html, receipts, issues: list, nextReceipt: maxNew != null ? Math.max(s.nextReceipt, maxNew + 1) : NaN };
       const pv = $('#pv');
       const scale = Math.min(1, Math.max(300, pv.clientWidth - 48) / 794);
       const H = pages * (1123 + 18) + 28;
       pv.innerHTML = `<div style="width:${794 * scale + 24}px;height:${H * scale}px;overflow:hidden"><iframe sandbox title="Anteprima ricevute" style="width:794px;height:${H}px;transform:scale(${scale});margin-left:12px"></iframe></div>`;
       $('iframe', pv).srcdoc = Receipt.build(out, s.assoc, { preview: true });
     };
-    let t;
-    const later = () => { clearTimeout(t); t = setTimeout(build, 200); };
-    // Aggiorna quota e visibilità delle righe che non sono state toccate a mano.
+    // L'anteprima si ridisegna con un piccolo ritardo; numeri e avvisi subito.
+    const later = () => { numbers(); clearTimeout(preview); preview = setTimeout(build, 200); };
     const recompute = () => {
       for (const it of items) {
         const st = row[it.id];
@@ -872,7 +1010,10 @@ function openPrintDialog(keys, opts = {}) {
       }
       later();
     };
-    for (const id of ['p-date', 'p-start', 'p-periodo']) $('#' + id).addEventListener('input', later);
+    // Data per tutte: si propaga alle ricevute la cui data non è stata scelta a mano.
+    $('#p-date').addEventListener('input', (e) => { for (const it of items) { const st = row[it.id]; if (!st.dT && e.target.value) st.date = e.target.value; } later(); });
+    $('#p-start').addEventListener('input', later);
+    $('#p-periodo').addEventListener('input', later);
     $('#p-quota').addEventListener('input', () => { touched.quota = true; recompute(); });
     $('#p-method').addEventListener('change', (e) => {
       for (const it of items) { const st = row[it.id]; if (!st.mT) { st.method = e.target.value; el('rm', it.id).value = e.target.value; } }
@@ -890,12 +1031,28 @@ function openPrintDialog(keys, opts = {}) {
       if (!touched.quota) $('#p-quota').value = defQuotaFor(top);
       recompute();
     });
-    $('#p-rows').addEventListener('input', (e) => { const k = e.target.dataset.rq; if (k) { row[k].quota = e.target.value; row[k].qT = true; later(); } });
+    $('#p-recalc').addEventListener('click', () => {
+      const g = $('#p-date').value || today;
+      for (const it of items) { const st = row[it.id]; st.nT = false; if (!(st.reuse && it.r.m.receiptDate)) { st.dT = false; st.date = g; } }
+      $('#p-start').value = s.nextReceipt;
+      recompute();
+    });
+    $('#p-rows').addEventListener('input', (e) => {
+      const kq = e.target.dataset.rq, kd = e.target.dataset.rd, kn = e.target.dataset.rn;
+      if (kq) { row[kq].quota = e.target.value; row[kq].qT = true; later(); }
+      if (kd) { if (e.target.value) { row[kd].date = e.target.value; row[kd].dT = true; later(); } }
+      if (kn) {
+        const n = parseInt(e.target.value, 10);
+        if (n > 0) { row[kn].no = n; row[kn].nT = true; } else row[kn].nT = false;   // campo svuotato: torna automatico
+        later();
+      }
+    });
     $('#p-rows').addEventListener('change', (e) => {
       const km = e.target.dataset.rm, kt = e.target.dataset.rt, kv = e.target.dataset.rv;
       if (km) { row[km].method = e.target.value; row[km].mT = true; }
       if (kt) { row[kt].tipo = e.target.value; row[kt].tT = true; }
       if (kv) { row[kv].voce = e.target.value; row[kv].vT = true; }
+      if (e.target.dataset.rn) later();   // a campo lasciato: mostra il numero effettivo
       recompute();
     });
     recompute();
@@ -1014,6 +1171,10 @@ function showRestoreDialog(r) {
 async function doPrint(mode) {
   const cur = openPrintDialog.current;
   if (!cur) return;
+  if (cur.issues && cur.issues.length) {
+    const righe = cur.issues.slice(0, 6).map((x) => `${x.level === 'error' ? '✕' : '⚠'} ${x.text}`).join('\n');
+    if (!confirm(`Ci sono ${cur.issues.length} avvisi su date o numeri:\n\n${righe}${cur.issues.length > 6 ? '\n…' : ''}\n\nStampare comunque?`)) return;
+  }
   const btns = document.querySelectorAll('.modal footer .btn');
   btns.forEach((b) => (b.disabled = true));
   try {
@@ -1060,6 +1221,7 @@ function go(view) {
   if (view === 'calendario' || view === 'impostazioni') App.detailKey = null;
   if (view === 'avvisi') App.avvisi = null;
   if (view === 'corsisti') { App.corsi = null; App.cs.sel.clear(); }
+  if (view === 'dashboard') App.dash = null;
   App.sel.clear();
   if (view === 'stampare') App.filters.scad = '';
   render();
@@ -1218,6 +1380,12 @@ document.addEventListener('click', async (e) => {
         if (App.busy && !confirm('Una lettura del file è in corso. Chiudere comunque?')) break;
         await window.api.quit();
         break;
+      case 'dash-refresh': App.dash = null; render(); break;
+      case 'dash-go': {
+        App.filters = Object.assign({}, App.filters, { q: '', stato: act.dataset.stato || '', scad: act.dataset.filtro || '', stampa: '', corsisti: '' });
+        go(act.dataset.view);
+        break;
+      }
       case 'cs-pay': await csSet([act.dataset.e], 'pagato'); break;
       case 'cs-clear': await csSet([act.dataset.e], null); break;
       case 'cs-skip': await csSet([act.dataset.e], 'nondovuto'); break;

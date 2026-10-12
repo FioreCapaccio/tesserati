@@ -32,6 +32,13 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await wait(500);
 
       await js(`window.api.setTheme('light').then(r=>{setData(r);render()})`);
+      log('vista iniziale =', await js(`App.view`));
+      win.setSize(1440, 2300); await wait(500);
+      await shot('00-dashboard');
+      win.setSize(1440, 900); await wait(300);
+      log('dashboard: riquadri =', JSON.stringify(await js(`[...document.querySelectorAll('.tile')].map(t=>t.querySelector('.tl').textContent+'='+t.querySelector('.tv').textContent)`)));
+      log('dashboard: da fare =', JSON.stringify(await js(`[...document.querySelectorAll('.todo-row')].map(t=>t.textContent.replace(/\\s+/g,' ').trim())`)));
+      await js(`document.querySelector('[data-nav=lista]').click()`); await wait(300);
       await shot('01-elenco');
       await js(`document.querySelector('[data-nav=impostazioni]').click()`);
       await js(`document.querySelector('[data-act=set-theme][data-v=dark]').click()`);
@@ -57,6 +64,20 @@ module.exports = ({ win, state, saveState, S, app }) => {
       log('colonna opzioni: larghezza contenuto', await js(`(()=>{const c=document.querySelector('.ctl');return c.scrollWidth+' / visibile '+c.clientWidth})()`));
       const pay = await js(`openPrintDialog.current.receipts.map(r=>r.method+'|'+r.quota)`);
       log('metodi per ricevuta =', JSON.stringify(pay));
+      // ---- numerazione per data ----
+      const dnum = () => js(`[...document.querySelectorAll('[data-rn]')].map(e=>e.value)`);
+      const nums0 = await dnum();
+      await js(`(()=>{const i=document.querySelector('[data-rd]');i.value='2026-10-20';i.dispatchEvent(new Event('input',{bubbles:true}));})()`); await wait(300);
+      const nums1 = await dnum();
+      await js(`(()=>{const i=document.querySelectorAll('[data-rn]')[1];i.value='130';i.dispatchEvent(new Event('input',{bubbles:true}));})()`); await wait(300);
+      const nums2 = await dnum();
+      const manuale = await js(`[...document.querySelectorAll('[data-rn]')].map(e=>e.classList.contains('manual'))`);
+      await js(`(()=>{const i=document.querySelectorAll('[data-rn]')[2];i.value='130';i.dispatchEvent(new Event('input',{bubbles:true}));})()`); await wait(300);
+      const dupMsg = await js(`document.querySelector('#p-issues').hidden ? '' : document.querySelector('#p-issues').textContent`);
+      const dupRow = await js(`[...document.querySelectorAll('.pwarn')].map(e=>e.textContent.trim()).filter(Boolean)[0] || ''`);
+      await js(`document.getElementById('p-recalc').click()`); await wait(400);
+      const nums3 = await dnum();
+      log('numeri: iniziali =', JSON.stringify(nums0), '| 1ª riga spostata al 20/10 =', JSON.stringify(nums1), '| 2ª scritta a mano 130 =', JSON.stringify(nums2), JSON.stringify(manuale), '| doppione 130 =>', dupMsg, '|', dupRow.slice(0, 70), '| dopo "ricalcola" =', JSON.stringify(nums3));
       await shot('04-dialogo-stampa');
       const html = await js(`openPrintDialog.current.html`);
       const nextNo = await js(`openPrintDialog.current.nextReceipt`);

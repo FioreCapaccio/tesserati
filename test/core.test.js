@@ -395,6 +395,138 @@ console.log(`\n${n} test superati`);
   });
 }
 
+// ---- Numerazione delle ricevute per data ----
+{
+  const N = require('../core/numbering');
+  const P = require('../core/people');
+  const row = (id, date, o = {}) => ({ id, date, order: o.order || 0, reuseNo: o.reuseNo || null, fixedNo: o.fixedNo || null });
+
+  t('numeri: seguono l\'ordine delle date (la più vecchia prende il numero più basso)', () => {
+    const nos = N.assign([row('a', '2026-10-09', { order: 0 }), row('b', '2026-10-05', { order: 1 }), row('c', '2026-10-07', { order: 2 }), row('d', '2026-10-05', { order: 3 })], 124);
+    assert.deepStrictEqual([nos.b, nos.d, nos.c, nos.a], [124, 125, 126, 127]);   // a parità di data, ordine dato
+  });
+  t('numeri: cambiando una data il ricalcolo riordina; il numero scritto a mano resta e gli altri lo saltano', () => {
+    const rows = [row('a', '2026-10-05', { order: 0 }), row('b', '2026-10-06', { order: 1 }), row('c', '2026-10-07', { order: 2 })];
+    assert.deepStrictEqual(Object.values(N.assign(rows, 10)), [10, 11, 12]);
+    rows[0].date = '2026-10-09';                                                    // a diventa l'ultima
+    const n2 = N.assign(rows, 10);
+    assert.deepStrictEqual([n2.b, n2.c, n2.a], [10, 11, 12]);
+    rows[1].fixedNo = 11;                                                           // b scritto a mano: 11
+    const n3 = N.assign(rows, 10);
+    assert.deepStrictEqual([n3.c, n3.b, n3.a], [10, 11, 12]);                       // c (auto) prende 10, a salta l'11
+  });
+  t('numeri: la ristampa tiene il suo numero; i numeri già emessi vengono saltati', () => {
+    const nos = N.assign([row('r', '2026-10-01', { reuseNo: 7 }), row('x', '2026-10-09', { order: 1 })], 5, new Set([5, 6, 8]));
+    assert.deepStrictEqual([nos.r, nos.x], [7, 9]);
+    assert.deepStrictEqual(N.assign([], 3), {});
+    assert.strictEqual(N.assign([row('z', '')], 0).z, 1);
+  });
+  t('numeri: controlli — doppioni e ordine non cronologico', () => {
+    const issued = [{ no: 10, date: '2026-10-05', nome: 'Rossi Anna' }, { no: 12, date: '2026-10-09', nome: 'Neri Zoe' }];
+    const c = N.check([{ id: 'a', no: 10, date: '2026-10-06' }, { id: 'b', no: 11, date: '2026-10-07' }, { id: 'c', no: 13, date: '2026-10-08' }, { id: 'd', no: 14, date: '2026-10-10' }, { id: 'e', no: 7, date: '2026-10-04', reuse: true }], issued);
+    assert.ok(c.a[0].level === 'error' && /già assegnato a Rossi Anna/.test(c.a[0].text));
+    assert.ok(!c.b);                                                                 // 11 tra 10 (5/10) e 12 (9/10), data 7/10: coerente
+    assert.ok(c.c[0].level === 'warn' && /n° 12 ha numero più basso ma è del 09\/10\/2026/.test(c.c[0].text));   // 13 del 8/10 ma la 12 è del 9/10
+    assert.ok(!c.d && !c.e);                                                         // la ristampa non si controlla
+    const dupBatch = N.check([{ id: 'a', no: 20, date: '2026-10-06' }, { id: 'b', no: 20, date: '2026-10-07' }], []);
+    assert.ok(dupBatch.a[0].level === 'error' && dupBatch.b[0].level === 'error');
+  });
+  t('numeri: elenco delle ricevute emesse — registro, ricevute di prima del registro e cestino', () => {
+    const s = S.emptyState();
+    S.importRecords(s, [{ id: '1', nome: 'A', cognome: 'Uno', nascita: '1990-01-01', provNascita: '', cf: 'C1', email: '', cell: '', indirizzo: '', citta: '', iscrizione: '2026-01-10', iscrizioneOra: '', scadenza: '2027-01-09', stato: 'Attivo' }, { id: '2', nome: 'B', cognome: 'Due', nascita: '1990-01-01', provNascita: '', cf: 'C2', email: '', cell: '', indirizzo: '', citta: '', iscrizione: '2026-01-10', iscrizioneOra: '', scadenza: '2027-01-09', stato: 'Attivo' }], {});
+    S.commitPrint(s, [{ key: '1_2026-01-10', no: 5, label: '5', quota: '', method: '', date: '2026-10-01', tipo: 'annuale' }], 6);
+    Object.assign(s.memberships['2_2026-01-10'], { receiptNo: 4, receiptDate: '2026-09-01', receiptLabel: '4' });   // senza voce nel registro
+    P.deletePerson(s, '2');
+    const l = N.issuedList(s);
+    assert.deepStrictEqual(l.map((x) => x.no).sort((a, b) => a - b), [4, 5]);
+    assert.strictEqual(l.find((x) => x.no === 4).nome, 'Due B');
+  });
+}
+
+// ---- Dashboard ----
+{
+  const D = require('../core/stats');
+  const P = require('../core/people');
+  const C = require('../core/corsi');
+  const TODAY = '2026-10-12';
+  const rec = (id, o = {}) => ({ id, nome: o.nome || 'N' + id, cognome: o.cognome || 'C' + id, nascita: o.nascita || '1990-06-15', provNascita: '', cf: 'F' + id, email: o.email === undefined ? `u${id}@x.it` : o.email, cell: '', indirizzo: '', citta: o.citta === undefined ? 'Pescara' : o.citta, iscrizione: o.isc || '2026-01-10', iscrizioneOra: '', scadenza: o.scad || '2027-01-09', stato: o.stato || 'Attivo' });
+  t('dashboard: valide / scadute / sospese / in scadenza sommano al totale', () => {
+    const s = S.emptyState();
+    S.importRecords(s, [rec('1'), rec('2', { scad: '2026-10-20' }), rec('3', { scad: '2026-12-01' }), rec('4', { scad: '2026-10-01' }), rec('5', { scad: '2026-03-01' }), rec('6', { stato: 'Sospeso' }), rec('7', { scad: '2026-10-12' })], {});
+    const d = D.dashboard(s, TODAY).tessere;
+    assert.deepStrictEqual([d.totale, d.valide, d.scadute, d.sospese], [7, 4, 2, 1]);
+    assert.strictEqual(d.valide + d.scadute + d.sospese, d.totale);
+    assert.deepStrictEqual([d.inScadenza, d.entroWarn, d.scadute30], [2, 4, 1]);        // 20/10 e oggi entro 30gg; entro 90gg anche 1/12 e il 9/1 (89 gg); 1/10 scaduta da 11 gg
+  });
+  t('dashboard: conta l\'ultima tessera di chi si è rinnovato, non quella vecchia scaduta', () => {
+    const s = S.emptyState();
+    S.importRecords(s, [rec('1', { isc: '2025-01-10', scad: '2026-01-09' }), rec('1', { isc: '2026-01-10', scad: '2027-01-09' })], {});
+    const d = D.dashboard(s, TODAY).tessere;
+    assert.deepStrictEqual([d.totale, d.valide, d.scadute], [1, 1, 0]);
+  });
+  t('dashboard: nuovi, rinnovi, età, città, email mancanti', () => {
+    const s = S.emptyState();
+    S.importRecords(s, [rec('1', { isc: '2026-10-01', nascita: '2015-03-02' }), rec('2', { isc: '2025-10-05', scad: '2026-10-04' }), rec('2', { isc: '2026-10-05', scad: '2027-10-04' }), rec('3', { isc: '2026-02-01', nascita: '1960-10-12', email: '', citta: 'Chieti' }), rec('4', { citta: '' })], {});
+    const d = D.dashboard(s, TODAY);
+    assert.deepStrictEqual([d.nuovi30, d.rinnovi30, d.nuoviAnno], [1, 1, 3]);            // nuovi quest'anno: 1, 3 e 4; negli ultimi 30 gg solo la 1; il rinnovo di 2
+    assert.strictEqual(d.eta.minorenni, 1);
+    assert.deepStrictEqual(d.eta.fasce.map((x) => x.n), [1, 0, 2, 0, 1]);                // 11 anni, 36 (1990-06-15) ×2, 66 (1960-10-12)
+    assert.strictEqual(d.eta.fasce.reduce((a, x) => a + x.n, 0), 4);
+    assert.deepStrictEqual(d.topCitta, [{ nome: 'Pescara', n: 2 }, { nome: 'Chieti', n: 1 }]);   // la città vuota non conta
+    assert.strictEqual(d.senzaEmail, 1);
+    assert.strictEqual(d.iscrizioniPerMese.length, 12); assert.strictEqual(d.iscrizioniPerMese[11].ym, '2026-10');
+    assert.strictEqual(d.iscrizioniPerMese[11].n, 2);                                    // 1/10 e 5/10
+    assert.deepStrictEqual(d.scadenzePerMese.map((x) => x.ym), ['2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03']);
+  });
+  t('dashboard: importi — numeri in formato italiano, ricevute senza importo, per metodo e tipo', () => {
+    assert.deepStrictEqual(['20', '20,50', '€ 1.250,50', ' 40 ', '', 'x', '0', null].map(D.amount), [20, 20.5, 1250.5, 40, null, null, null, null]);
+    const s = S.emptyState(); S.importRecords(s, [rec('1')], {}); const key = '1_2026-01-10';
+    S.commitPrint(s, [
+      { key, no: 1, label: '1', quota: '25', method: 'Contanti', date: '2026-10-01', tipo: 'annuale' },
+      { key, no: 2, label: '2', quota: '40,50', method: 'POS', date: '2026-10-02', tipo: 'mensile', periodo: '2026-11' },
+      { key, no: 3, label: '3', quota: '80', method: 'POS', date: '2026-10-03', tipo: 'corso', periodo: '2026' },
+      { key, no: 4, label: '4', quota: '', method: '', date: '2026-10-04', tipo: 'mensile', periodo: '2026-12' },
+      { key, no: 5, label: '5', quota: '99', method: 'Contanti', date: '2025-12-31', tipo: 'mensile', periodo: '2025-11' },   // anno scorso: non conta
+    ], 6);
+    const r = D.dashboard(s, TODAY).ricevute;
+    assert.deepStrictEqual([r.emesse, r.senzaImporto, r.totale], [4, 1, 145.5]);
+    assert.deepStrictEqual(r.perTipo.map((x) => [x.tipo, x.n, x.importo]), [['annuale', 1, 25], ['mensile', 2, 40.5], ['corso', 1, 80]]);
+    assert.deepStrictEqual(r.perMetodo.map((x) => [x.metodo, x.importo]), [['Contanti', 25], ['POS', 120.5]]);
+  });
+  t('dashboard: corsisti (stagione, pagati, scaduti, prossima scadenza) e "da fare"', () => {
+    const s = S.emptyState(); S.importRecords(s, [rec('1', { scad: '2026-10-25' }), rec('2'), rec('3', { email: 'non-valida' })], {});
+    S.updatePerson(s, '1', { corsista: true }); S.updatePerson(s, '2', { corsista: true });
+    C.setPay(s, '1', 2026, 'iscrizione', 'pagato');
+    S.updateMemberships(s, ['1_2026-01-10'], { printed: false });
+    const d = D.dashboard(s, '2026-11-12');
+    assert.deepStrictEqual([d.corsisti.totale, d.corsisti.label, d.corsisti.phase], [2, '2026/27', 'incorso']);
+    assert.deepStrictEqual([d.corsisti.pagati, d.corsisti.scaduti], [1, 3]);            // iscrizione di 2 + novembre di 1 e 2 (scaduti il 1/11)
+    assert.deepStrictEqual(d.corsisti.prossima, { due: '2026-12-01', days: 19, n: 2 });
+    const ids = d.attenzione.map((x) => x.id);
+    assert.ok(ids.includes('stampare') && ids.includes('corsisti') && ids.includes('senzaEmail') && ids.includes('scadute30'));
+    assert.ok(d.attenzione.every((x) => x.n > 0 && x.view));
+  });
+  t('dashboard: archivio nuovo (senza dati) non va in errore', () => {
+    const d = D.dashboard(S.emptyState(), TODAY);
+    assert.deepStrictEqual([d.tessere.totale, d.corsisti.totale, d.ricevute.emesse, d.attenzione.length], [0, 0, 0, 0]);
+    assert.strictEqual(d.eta.media, null); assert.strictEqual(d.archivio.ultimaLettura, null);
+  });
+  if (fs.existsSync(csvPath)) {
+    t('dashboard: CSV reale — conteggi coerenti con un calcolo indipendente', () => {
+      const s = S.emptyState(); S.importRecords(s, readMembers(fs.readFileSync(csvPath)).records, {});
+      const d = D.dashboard(s, TODAY);
+      const latest = new Map(); for (const m of Object.values(s.memberships)) { const c = latest.get(m.personId); if (!c || m.iscrizione > c.iscrizione) latest.set(m.personId, m); }
+      const all = [...latest.values()];
+      assert.strictEqual(d.tessere.totale, 561); assert.strictEqual(all.length, 561);
+      assert.strictEqual(d.tessere.valide, all.filter((m) => m.stato === 'Attivo' && m.scadenza >= TODAY).length);
+      assert.strictEqual(d.tessere.scadute, all.filter((m) => m.stato === 'Attivo' && m.scadenza < TODAY).length);
+      assert.strictEqual(d.tessere.sospese, all.filter((m) => m.stato !== 'Attivo').length);
+      assert.strictEqual(d.eta.fasce.reduce((a, x) => a + x.n, 0), 561);
+      console.log(`   oggi (${TODAY}): totale ${d.tessere.totale} · valide ${d.tessere.valide} · scadute ${d.tessere.scadute} · sospese ${d.tessere.sospese} · in scadenza ${d.tessere.inScadenza} · minorenni ${d.eta.minorenni} · età media ${d.eta.media}`);
+    });
+  }
+}
+
 // ---- Ricerca del CSV nella cartella Download ----
 {
   const os = require('os');
