@@ -28,7 +28,7 @@ const dueDate = (slot, y) => (slot === ISCRIZIONE ? `${y}-11-01` : `${slot}-01`)
 const getPay = (p, y, slot) => (p && p.corso && p.corso[y] && p.corso[y][slot]) || null;
 
 // status: 'pagato' | 'nondovuto' | null (= torna "da pagare").
-function setPay(state, personId, y, slot, status, { at = new Date().toISOString(), no = null, label = '', manual = true } = {}) {
+function setPay(state, personId, y, slot, status, { at = new Date().toISOString(), no = null, label = '', manual = true, method = '', importo = null, bank = '' } = {}) {
   const p = state.persons[personId];
   if (!p) throw new Error('Tesserato non trovato.');
   if (!seasonSlots(y).includes(slot)) throw new Error('Scadenza non valida per questa stagione.');
@@ -40,7 +40,7 @@ function setPay(state, personId, y, slot, status, { at = new Date().toISOString(
     return;
   }
   p.corso[y] = p.corso[y] || {};
-  p.corso[y][slot] = { status, at, manual, ...(no != null ? { no, label } : {}) };
+  p.corso[y][slot] = { status, at, manual, ...(bank ? { method, importo, bank } : {}), ...(no != null ? { no, label } : {}) };
 }
 
 function classOf(status, days, soonDays, warnDays) {
@@ -68,7 +68,7 @@ function items(state, y, today) {
       out.push({
         personId: p.id, key, nome: p.nome, cognome: p.cognome, slot, due, days, status,
         cls: classOf(status, days, soonDays, warnDays),
-        paidAt: pay && pay.status === 'pagato' ? pay.at : null, receipt: pay && pay.no != null ? { no: pay.no, label: pay.label } : null, manual: pay ? !!pay.manual : false,
+        bank: !!(pay && pay.bank), paidAt: pay && pay.status === 'pagato' ? pay.at : null, receipt: pay && pay.no != null ? { no: pay.no, label: pay.label } : null, manual: pay ? !!pay.manual : false,
       });
     }
   }
@@ -77,6 +77,11 @@ function items(state, y, today) {
 }
 
 const overdueCount = (state, today) => items(state, seasonOfDate(today), today).filter((i) => i.cls === 'expired').length;
+
+// Se il pagamento era già stato segnato da un bonifico, la ricevuta aggiunge il numero e lascia data e dati del bonifico.
+function keepBank(prev, next) {
+  return prev && prev.status === 'pagato' && prev.bank ? { ...next, at: prev.at, manual: prev.manual, method: prev.method, importo: prev.importo, bank: prev.bank } : next;
+}
 
 // Una ricevuta stampata segna da sola il pagamento, ma solo per i corsisti.
 function markFromReceipt(state, r, now = new Date()) {
@@ -87,12 +92,12 @@ function markFromReceipt(state, r, now = new Date()) {
   if (r.tipo === 'mensile') {
     const y = r.periodo ? seasonOfPeriod(r.periodo) : null;
     if (y == null) return false;
-    setPay(state, p.id, y, r.periodo, 'pagato', { at, no: r.no, label: r.label, manual: false });
+    setPay(state, p.id, y, r.periodo, 'pagato', keepBank(getPay(p, y, r.periodo), { at, no: r.no, label: r.label, manual: false }));
     return true;
   }
   if (r.tipo === 'corso') {
     const y = /^\d{4}$/.test(r.periodo || '') ? Number(r.periodo) : seasonOfDate(r.date || at.slice(0, 10));
-    setPay(state, p.id, y, ISCRIZIONE, 'pagato', { at, no: r.no, label: r.label, manual: false });
+    setPay(state, p.id, y, ISCRIZIONE, 'pagato', keepBank(getPay(p, y, ISCRIZIONE), { at, no: r.no, label: r.label, manual: false }));
     return true;
   }
   return false;

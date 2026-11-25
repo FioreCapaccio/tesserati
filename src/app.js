@@ -21,6 +21,7 @@ const ICON = {
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3M12 9v9M17 12v6"/></svg>',
+  bank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>',
@@ -53,6 +54,7 @@ const App = {
   busy: false,
   dash: null, dashLoading: false,
   corsi: null, csLoading: false, cs: { season: null, mode: 'mese', mi: null, sel: new Set() },
+  bk: null,
   avvisi: null, avSel: new Set(), avKnown: new Set(), avLoading: false,
 };
 
@@ -112,6 +114,7 @@ function renderSide() {
     ${item('stampare', 'print', 'Da stampare', todo.length)}
     ${item('calendario', 'cal', 'Calendario tesserati')}
     ${item('corsisti', 'book', 'Calendario corsisti', App.corsiInfo && App.corsiInfo.overdue ? App.corsiInfo.overdue : null)}
+    ${item('bonifici', 'bank', 'Bonifici')}
     ${item('avvisi', 'mail', 'Avvisi', App.mail ? App.mail.dueCount : 0)}
     ${item('impostazioni', 'cog', 'Impostazioni')}
     <div class="side-bottom">
@@ -133,6 +136,7 @@ function render() {
   else if (App.view === 'avvisi') body = avvisiView();
   else if (App.view === 'corsisti') body = corsistiView();
   else if (App.view === 'dashboard') body = dashboardView();
+  else if (App.view === 'bonifici') body = bonificiView();
   else body = settingsView();
   main.innerHTML = `<div class="view">${body}</div><footer class="app-foot">Tesserati · versione ${esc(App.version || '')} · ${esc(App.copyright || '')}</footer>`;
   main.scrollTop = scroll;
@@ -169,7 +173,7 @@ function listView() {
       ${todoMode ? '' : sel('stato', [['', 'Ogni stato'], ['Attivo', 'Attivo'], ['Sospeso', 'Sospeso']], f.stato)}
       ${sel('scad', [['', 'Ogni scadenza'], ['expired', 'Scadute'], ['soon', `Entro ${S().soonDays} giorni`], ['warn', `Entro ${S().warnDays} giorni`], ['ok', 'Valide']], f.scad)}
       ${todoMode ? '' : sel('stampa', [['', 'Ricevuta: tutte'], ['todo', 'Da stampare'], ['done', 'Già stampate']], f.stampa)}
-      ${todoMode ? '' : sel('corsisti', [['', 'Tutti i tesserati'], ['si', 'Solo corsisti']], f.corsisti || '')}
+      ${todoMode ? '' : sel('corsisti', [['', 'Tutti i tesserati'], ['si', 'Solo corsisti'], ['bonifico', 'Bonifico: ricevuta da stampare']], f.corsisti || '')}
       ${todoMode ? '' : `<label class="check"><input type="checkbox" data-filter="latestOnly" ${f.latestOnly ? 'checked' : ''}> Solo ultima tessera</label>`}
     </div>
     <div id="selbar"></div>
@@ -196,6 +200,7 @@ function filteredRows() {
   if (!todoMode && f.stato) rows = rows.filter((r) => r.m.stato === f.stato);
   if (f.scad) rows = rows.filter((r) => r.st === f.scad);
   if (!todoMode && f.corsisti === 'si') rows = rows.filter((r) => r.p.corsista);
+  if (!todoMode && f.corsisti === 'bonifico') rows = rows.filter((r) => bonificoPending(r.p, r.m));
   if (!todoMode && f.stampa) rows = rows.filter((r) => (f.stampa === 'todo') === !r.m.printed);
   if (q.length) {
     rows = rows.filter((r) => {
@@ -219,7 +224,7 @@ function renderTable() {
     const minor = age(p.nascita) != null && age(p.nascita) < 18;
     return `<tr data-key="${esc(m.key)}" class="${App.detailKey === m.key ? 'active' : ''}">
       <td class="cbx"><input type="checkbox" data-sel="${esc(m.key)}" ${App.sel.has(m.key) ? 'checked' : ''} aria-label="Seleziona ${esc(p.cognome)} ${esc(p.nome)}"></td>
-      <td class="name">${esc(p.cognome)} ${esc(p.nome)}${minor ? ' <span class="badge neutral">minorenne</span>' : ''}${p.manual ? ' <span class="badge neutral">manuale</span>' : ''}${p.corsista ? ' <span class="badge neutral">corsista</span>' : ''}<small>${esc(p.email)}</small></td>
+      <td class="name">${esc(p.cognome)} ${esc(p.nome)}${minor ? ' <span class="badge neutral">minorenne</span>' : ''}${p.manual ? ' <span class="badge neutral">manuale</span>' : ''}${p.corsista ? ' <span class="badge neutral">corsista</span>' : ''}${bonificoPending(p, m) ? ' <span class="badge todo" title="Pagamento con bonifico confermato: ricevuta da stampare">bonifico</span>' : ''}<small>${esc(p.email)}</small></td>
       <td class="num opt">${esc(p.id)}</td>
       <td class="opt">${fmt(p.nascita)}</td>
       <td class="opt">${esc(p.citta) || '<span style="color:var(--muted)">—</span>'}</td>
@@ -267,6 +272,8 @@ function renderDrawer() {
   const legacy = hist.filter((h) => h.receiptNo && !led.some((r) => r.tipo === 'annuale' && r.key === h.key && r.no === h.receiptNo))
     .map((h) => ({ tipo: 'annuale', no: h.receiptNo, label: h.receiptLabel || String(h.receiptNo), date: h.receiptDate || '', quota: h.quota, method: h.paymentMethod }));
   const issued = [...led, ...legacy].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.no - a.no);
+  const bankList = Object.values(App.data.bank || {}).filter((b) => b.status === 'confermato' && b.personId === p.id).sort((a, b) => b.date.localeCompare(a.date))
+    .map((b) => ({ ...b, pending: b.target === 'tessera' ? hist.some((h) => h.bonifico && h.bonifico.date === b.date && h.bonifico.receipt == null) : (() => { const [k, v] = b.target.split(':'); const y = k === 'iscrizione' ? Number(v) : (Number(v.slice(5, 7)) >= 11 ? Number(v.slice(0, 4)) : Number(v.slice(0, 4)) - 1); const pay = p.corso && p.corso[y] && p.corso[y][k === 'iscrizione' ? 'iscrizione' : v]; return !!(pay && pay.bank && pay.no == null); })() }));
   const keep = dr.scrollTop;
   dr.hidden = false;
   dr.innerHTML = `
@@ -323,6 +330,7 @@ function renderDrawer() {
       </div></div>
       ${issued.length ? `<div class="d-sec"><h3>Ricevute emesse (${issued.length})</h3><div class="issued">
         ${issued.map((r) => `<div class="iss"><b>N° ${esc(r.label || r.no)}</b><span>${esc(Receipt.causale(r.tipo, r.periodo))}</span><small>${r.date ? fmt(r.date) : ''}${Receipt.formatQuota(r.quota) ? ' · ' + esc(Receipt.formatQuota(r.quota)) : ''}${r.method ? ' · ' + esc(r.method) : ''}</small></div>`).join('')}</div></div>` : ''}
+      ${bankList.length ? `<div class="d-sec"><h3>Bonifici (${bankList.length})</h3><div class="issued">${bankList.map((b) => `<div class="iss"><b>${b.importo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}</b><span>${esc(voceLabel(b.target))}</span><small>${fmt(b.date)}${b.pending ? ' · <b>ricevuta da stampare</b>' : ''}</small></div>`).join('')}</div></div>` : ''}
       ${edited.length ? `<div class="d-sec"><h3>Modificato a mano</h3><p style="margin:0 0 8px;color:var(--muted)">Questi dati arrivavano da Younity e restano come li hai scritti anche dopo “Rileggi file”: <b>${[...new Set(edited)].map((f) => FIELD_NAMES[f] || f).join(', ')}</b>.</p>
         <button class="btn sm" data-act="reset-overrides">Torna ai dati del CSV alla prossima lettura</button></div>` : ''}
       <div class="d-sec"><h3>Note</h3><textarea class="field" id="note" placeholder="Annotazioni sul tesserato…">${esc(p.note)}</textarea></div>
@@ -406,6 +414,118 @@ function yearGrid(rows) {
   }).join('')}</div>`;
 }
 
+// ======================= Bonifici (estratto conto) =======================
+const seasonMonthsJs = (y) => [`${y}-11`, `${y}-12`, `${y + 1}-01`, `${y + 1}-02`, `${y + 1}-03`, `${y + 1}-04`, `${y + 1}-05`];
+function voceLabel(k) {
+  if (k === 'tessera') return 'Tessera associativa';
+  const [kind, v] = String(k).split(':');
+  if (kind === 'iscrizione') return `Iscrizione al corso ${Receipt.seasonLabel(v)}`;
+  if (kind === 'rata') return `Rata di ${MONTHS[Number(v.slice(5, 7)) - 1]} ${v.slice(0, 4)}`;
+  return k;
+}
+// Un bonifico confermato aspetta la ricevuta: tessera non ancora stampata oppure pagamento del corso senza numero di ricevuta.
+function bonificoPending(p, m) {
+  if (m && m.bonifico && m.bonifico.receipt == null) return true;
+  return !!(p && p.corso && Object.values(p.corso).some((slots) => Object.values(slots).some((v) => v.bank && v.no == null)));
+}
+const personLabel = (p) => `${p.cognome} ${p.nome} (ID ${p.id})`;
+function voceOptionsFor(person, date, current) {
+  const list = ['tessera'];
+  if (person && person.corsista) { const s = seasonOfDate(date); for (const y of [s, s - 1]) list.push(`iscrizione:${y}`, ...seasonMonthsJs(y).map((ym) => `rata:${ym}`)); }
+  if (current && !list.includes(current)) list.unshift(current);
+  return list;
+}
+const BK_CONF = { alta: ['ok', 'Fiducia alta'], media: ['warn', 'Da controllare'], bassa: ['expired', 'Da abbinare'] };
+
+function bkSetResult(res) {
+  const rows = {};
+  for (const p of res.proposals) rows[p.hash] = { inc: p.confidence !== 'bassa' && !!p.personId, personId: p.personId, target: p.target ? targetKeyJs(p.target) : 'tessera' };
+  App.bk = { res, rows };
+}
+const targetKeyJs = (t) => (t.kind === 'tessera' ? 'tessera' : t.kind === 'iscrizione' ? `iscrizione:${t.season}` : `rata:${t.ym}`);
+
+function bonificiView() {
+  const bk = App.bk;
+  const head = `<div class="page-head"><div><h1>Bonifici</h1><p>Carica l’estratto conto della banca (PDF, Excel o CSV): trovo i bonifici in entrata, li abbino ai tesserati e preparo le ricevute. Il file viene solo letto: non viene copiato né salvato.</p></div>
+    <button class="btn primary" data-act="bank-open">${ICON.bank} ${bk ? 'Carica un altro estratto' : 'Carica estratto conto…'}</button></div>`;
+  if (!bk) return head + '<div class="empty"><h2>Nessun estratto caricato</h2><p>Scegli il file scaricato dalla banca. Controllo anche che i movimenti quadrino con i saldi, così so che la lettura è completa.</p></div>';
+  const r = bk.res, q = r.quadratura;
+  const people = Object.values(App.data.persons).sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
+  const sel = r.proposals.filter((p) => bk.rows[p.hash].inc && bk.rows[p.hash].personId);
+  const tot = sel.reduce((a, p) => a + p.importo, 0);
+  const summary = `<div class="bkbar"><span><b>${esc(r.name)}</b>${r.periodo ? ` · dal ${fmt(r.periodo.da)} al ${fmt(r.periodo.a)}` : ''} · ${nfmt(r.movimenti)} movimenti</span>
+    ${q ? (q.ok ? `<span class="badge ok" title="Saldo iniziale ${eur(q.saldoIniziale)} + entrate ${eur(q.entrate)} − uscite ${eur(q.uscite)} = saldo finale ${eur(q.saldoFinale)}">✓ Quadratura dei saldi</span>` : `<span class="badge expired" title="Mancano ${eur(q.differenza)}">✕ I movimenti non quadrano con i saldi (differenza ${eur(q.differenza)}): la lettura potrebbe essere incompleta</span>`) : '<span class="badge neutral">Quadratura non disponibile in questo file</span>'}
+    <span class="badge neutral">${nfmt(r.proposals.length)} da controllare</span>${r.registrati ? `<span class="badge neutral">${nfmt(r.registrati)} già registrati</span>` : ''}
+    <label class="check"><input type="checkbox" data-bkall ${r.all ? 'checked' : ''}> Mostra anche le altre entrate (${nfmt(r.scartati)} escluse: POS, incassi, commissioni)</label></div>`;
+  const rowsHtml = r.proposals.map((p) => {
+    const st = bk.rows[p.hash], person = st.personId ? App.data.persons[st.personId] : null;
+    const [cls, lab] = BK_CONF[p.confidence];
+    const opts = voceOptionsFor(person, p.date, st.target);
+    const notes = [...p.reasons.map((x) => `<span class="why">${esc(x)}</span>`), ...p.warn.map((x) => `<span class="warnx">⚠ ${esc(x)}</span>`),
+      person && p.candidates.length > 1 ? `<span class="why">altri possibili: ${esc(p.candidates.filter((c) => c.personId !== st.personId).map((c) => c.nome).join(', '))}</span>` : '',
+      person && st.target === 'tessera' && Object.values(App.data.memberships).some((m) => m.personId === person.id && m.printed && !m.bonifico) ? '<span class="why">la tessera ha già una ricevuta stampata</span>' : '',
+      person && st.target !== 'tessera' && !person.corsista ? '<span class="why">alla conferma verrà segnato come corsista</span>' : ''].filter(Boolean).join(' · ');
+    return `<tr data-bkrow="${esc(p.hash)}" class="bk-${p.confidence}">
+      <td class="cbx"><input type="checkbox" data-bkinc="${esc(p.hash)}" ${st.inc ? 'checked' : ''} ${st.personId ? '' : 'disabled'} aria-label="Includi"></td>
+      <td class="num">${fmt(p.date)}</td><td class="num"><b>${eur(p.importo)}</b></td>
+      <td><div class="bkdesc" title="${esc(p.descr)}">${esc(p.descr)}</div>${notes ? `<div class="bknotes">${notes}</div>` : ''}</td>
+      <td><input class="field" list="bk-people" data-bkp="${esc(p.hash)}" value="${person ? esc(personLabel(person)) : ''}" placeholder="Cerca un tesserato…" autocomplete="off" aria-label="Abbinato a"></td>
+      <td><select class="field" data-bkv="${esc(p.hash)}" ${person ? '' : 'disabled'} aria-label="Per">${opts.map((o) => `<option value="${esc(o)}" ${o === st.target ? 'selected' : ''}>${esc(voceLabel(o))}</option>`).join('')}</select></td>
+      <td><span class="badge ${cls}">${lab}</span></td>
+      <td><button class="btn sm ghost" data-act="bank-ignore" data-h="${esc(p.hash)}" title="Non è un pagamento di un tesserato: non riproporlo">Ignora</button></td></tr>`;
+  }).join('');
+  return head + summary + (r.proposals.length ? `<datalist id="bk-people">${people.map((p) => `<option value="${esc(personLabel(p))}"></option>`).join('')}</datalist>
+    <div class="tablewrap"><table class="bktable"><thead><tr><th class="cbx"><input type="checkbox" id="bk-all" ${sel.length === r.proposals.length ? 'checked' : ''} aria-label="Seleziona tutti"></th><th>Data</th><th>Importo</th><th>Ordinante e causale</th><th>Abbinato a</th><th>Per</th><th>Esito</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+    <div class="bkfoot"><span><b>${sel.length}</b> selezionat${sel.length === 1 ? 'o' : 'i'} · ${eur(tot)}</span>
+      <button class="btn" data-act="bank-confirm" ${sel.length ? '' : 'disabled'}>Conferma selezionati</button>
+      <button class="btn primary" data-act="bank-confirm-print" ${sel.length ? '' : 'disabled'}>${ICON.print} Conferma e prepara le ricevute</button></div>`
+    : `<div class="empty"><h2>Nessun bonifico da controllare</h2><p>${r.registrati ? 'Quelli di questo estratto sono già stati registrati.' : 'In questo estratto non ci sono bonifici in entrata. Prova “Mostra anche le altre entrate”.'}</p></div>`);
+}
+
+function bkItems(hashes) {
+  const bk = App.bk;
+  return hashes.map((h) => { const p = bk.res.proposals.find((x) => x.hash === h), st = bk.rows[h]; return { hash: h, date: p.date, valuta: p.valuta, importo: p.importo, descr: p.descr, payerKey: p.payerKey, personId: st.personId, targetKey: st.target }; });
+}
+async function bkReload(extra) {
+  const res = await window.api.bankOpen({ file: App.bk.res.file, mapping: App.bk.res.mapping, all: App.bk.res.all, ...extra });
+  if (res.needMapping) return bkMappingModal(res);
+  bkSetResult(res); render();
+}
+function bkMappingModal(res) {
+  const opt = (sel, blank) => `<option value="">${blank}</option>${res.headers.map((h, i) => `<option value="${i}" ${String(i) === String(sel) ? 'selected' : ''}>${esc(h || `Colonna ${i + 1}`)}</option>`).join('')}`;
+  openModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><header><h2 id="mt">Quali sono le colonne?</h2></header>
+    <div class="mbody"><p style="margin:0 0 12px;color:var(--muted)">Non riconosco da sola le colonne di <b>${esc(res.name)}</b>. Indicale una volta.</p>
+      <div class="form"><label>Data del movimento *<select class="field" id="bm-data">${opt('', 'Scegli…')}</select></label>
+        <label>Descrizione / causale *<select class="field" id="bm-descr">${opt('', 'Scegli…')}</select></label>
+        <label>Entrate (o importo con segno) *<select class="field" id="bm-avere">${opt('', 'Scegli…')}</select></label>
+        <label>Uscite (se è una colonna a parte)<select class="field" id="bm-dare">${opt('', 'Nessuna')}</select></label></div>
+      <div id="bm-err" class="form-error" hidden></div></div>
+    <footer><button class="btn" data-act="close-modal">Annulla</button><button class="btn primary" id="bm-ok">Leggi il file</button></footer></div>`, () => {
+    $('#bm-ok').addEventListener('click', async () => {
+      const g = (id) => $('#' + id).value;
+      if (g('bm-data') === '' || g('bm-descr') === '' || g('bm-avere') === '') { $('#bm-err').hidden = false; $('#bm-err').textContent = 'Scegli almeno data, descrizione ed entrate.'; return; }
+      const mapping = { headerRow: res.headerRow, data: Number(g('bm-data')), descr: Number(g('bm-descr')) };
+      if (g('bm-dare') !== '') { mapping.avere = Number(g('bm-avere')); mapping.dare = Number(g('bm-dare')); } else mapping.importo = Number(g('bm-avere'));
+      closeModal();
+      try { const r = await window.api.bankOpen({ file: res.file, mapping }); if (r.needMapping) toast('Non riesco a leggere il file con queste colonne.'); else { bkSetResult(r); render(); } } catch (e) { toast('Errore: ' + e.message); }
+    });
+  });
+}
+async function bkConfirm(thenPrint) {
+  const bk = App.bk;
+  const hashes = bk.res.proposals.filter((p) => bk.rows[p.hash].inc && bk.rows[p.hash].personId).map((p) => p.hash);
+  const r = await window.api.bankConfirm(bkItems(hashes));
+  setData(r);
+  bk.res.proposals = bk.res.proposals.filter((p) => !(App.data.bank && App.data.bank[p.hash]));   // le righe registrate escono dall'elenco
+  render();
+  const err = r.errors.length ? `<ul class="warns">${r.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : '';
+  if (thenPrint && r.rows.length) { if (r.errors.length) toast(`${r.errors.length} bonifici non registrati: vedi l’elenco.`); openPrintDialog(null, { rows: r.rows }); return; }
+  openModal(`<div class="modal"><header><h2>${r.done.length} bonific${r.done.length === 1 ? 'o registrato' : 'i registrati'}</h2></header><div class="mbody">
+    <p style="margin:0">${r.done.length ? 'I corsisti risultano pagati con la data del bonifico; le tessere hanno importo e metodo già pronti per la ricevuta.' : 'Nessun bonifico registrato.'}</p>${r.diventati && r.diventati.length ? `<p>Segnati come corsisti: <b>${esc(r.diventati.join(', '))}</b>.</p>` : ''}${err}</div>
+    <footer><button class="btn" data-act="close-modal">Chiudi</button>${r.rows.length ? '<button class="btn primary" data-act="bank-print-last">Prepara le ricevute</button>' : ''}</footer></div>`);
+  App.bk.lastRows = r.rows;
+}
+
 // ======================= Dashboard =======================
 async function loadDash() {
   if (App.dashLoading) return;
@@ -449,7 +569,7 @@ function dashboardView() {
     dTile('neutral', 'Minorenni', d.eta.minorenni, d.eta.media != null ? `età media ${d.eta.media} anni` : '—', go('lista')),
   ].join('');
   const todo = d.attenzione.length
-    ? `<div class="todo">${d.attenzione.map((x) => `<button class="todo-row" ${go(x.view, x.filtro ? `data-filtro="${x.filtro}"` : '')}><b>${nfmt(x.n)}</b><span>${esc(x.testo)}</span><span class="go">Apri →</span></button>`).join('')}</div>`
+    ? `<div class="todo">${d.attenzione.map((x) => `<button class="todo-row" ${go(x.view, `${x.filtro ? `data-filtro="${x.filtro}"` : ''} ${x.corsisti ? `data-corsisti="${x.corsisti}"` : ''}`)}><b>${nfmt(x.n)}</b><span>${esc(x.testo)}</span><span class="go">Apri →</span></button>`).join('')}</div>`
     : '<p class="allok"><span class="badge ok">✓</span> Tutto in ordine: nessuna azione richiesta.</p>';
   const segs = [['ok', 'Pagati', c.pagati], ['expired', 'Scaduti non pagati', c.scaduti], ['soon', `Da pagare entro ${d.soonDays} gg`, c.inScadenza], ['warn', 'Più avanti', c.dopo], ['skip', 'Non dovuti', c.nonDovuti]];
   const totSeg = segs.reduce((a, x) => a + x[2], 0);
@@ -506,7 +626,7 @@ async function loadCorsi() {
 
 const csSlotName = (slot) => (slot === 'iscrizione' ? 'Iscrizione al corso' : `Rata di ${MONTHS[Number(slot.slice(5, 7)) - 1]}`);
 function csStatusText(i) {
-  if (i.status === 'pagato') return `Pagato${i.paidAt ? ' il ' + new Date(i.paidAt).toLocaleDateString('it-IT') : ''}${i.receipt ? ` · ricevuta n° ${esc(i.receipt.label || i.receipt.no)}` : ''}`;
+  if (i.status === 'pagato') return `Pagato${i.bank ? ' con bonifico' : ''}${i.paidAt ? ' il ' + new Date(i.paidAt).toLocaleDateString('it-IT') : ''}${i.receipt ? ` · ricevuta n° ${esc(i.receipt.label || i.receipt.no)}` : ''}`;
   if (i.status === 'nondovuto') return 'Non dovuto';
   if (i.days < 0) return `Scaduto da ${-i.days} gg`;
   if (i.days === 0) return 'Scade oggi';
@@ -868,7 +988,7 @@ function openPrintDialog(keys, opts = {}) {
     top.voce = opts.rows.every((x) => (x.voce || 'rata') === v0) ? v0 : 'rata';   // voci miste (rata + iscrizione): resta quella di ogni riga
   }
   const defQuotaFor = (st) => (st.tipo === 'annuale' ? s.defaultQuota : st.voce === 'iscrizione' ? s.defaultIscrizioneCorso : s.defaultRetta);
-  const items = spec.map((sp, i) => ({ id: `${sp.key}#${i}`, r: map.get(sp.key), fixed: sp.tipo || null, fixedVoce: sp.voce || null, i })).filter((x) => x.r)
+  const items = spec.map((sp, i) => ({ id: `${sp.key}#${i}`, r: map.get(sp.key), fixed: sp.tipo || null, fixedVoce: sp.voce || null, spPeriodo: sp.periodo || null, spQuota: sp.quota != null ? sp.quota : null, spMethod: sp.method || null, spMin: sp.minDate || null, spFresh: !!sp.fresh, i })).filter((x) => x.r)
     .sort((x, y) => byName(x.r, y.r) || x.i - y.i);
   if (!items.length) return;
   const pages = Math.ceil(items.length / 4);
@@ -882,20 +1002,21 @@ function openPrintDialog(keys, opts = {}) {
   const quotaFor = (st) => (touched.quota && st.tipo === top.tipo && (st.tipo === 'annuale' || st.voce === top.voce) ? $('#p-quota').value : defQuotaFor(st));
   items.forEach((it) => {
     const tipo = it.fixed || top.tipo, voce = it.fixedVoce || top.voce, own = tipo === 'annuale', m = it.r.m;
-    const reuse = own && !!m.receiptNo;
-    const st = { tipo, voce, quota: '', method: (own && m.paymentMethod) || s.defaultPayment, qT: own && !!m.quota, mT: own && !!m.paymentMethod, tT: !!it.fixed, vT: !!it.fixedVoce,
-      date: (reuse && m.receiptDate) || today, dT: reuse && !!m.receiptDate, no: null, nT: false, reuse };
-    st.quota = (own && m.quota) || defQuotaFor(st);
+    const reuse = own && !!m.receiptNo && !it.spFresh;
+    const st = { tipo, voce, quota: '', method: it.spMethod || (own && m.paymentMethod) || s.defaultPayment, qT: it.spQuota != null || (own && !!m.quota), mT: !!it.spMethod || (own && !!m.paymentMethod), tT: !!it.fixed, vT: !!it.fixedVoce,
+      date: (reuse && m.receiptDate) || today, dT: reuse && !!m.receiptDate, no: null, nT: false, reuse, periodo: it.spPeriodo };
+    st.quota = it.spQuota != null ? it.spQuota : (own && m.quota) || defQuotaFor(st);
     row[it.id] = st;
   });
   const el = (kind, id) => document.querySelector(`[data-${kind}="${CSS.escape(id)}"]`);
   const ledgerOf = (st) => ledgerTipo(st);
-  const reuseOf = (it, st) => ledgerOf(st) === 'annuale' && !!it.r.m.receiptNo;
+  const reuseOf = (it, st) => ledgerOf(st) === 'annuale' && !!it.r.m.receiptNo && !it.spFresh;
   // Data del pagamento, se la conosciamo: iscrizione della tessera, oppure il giorno in cui il pagamento del corso è stato segnato.
   const payDateOf = (it, st, periodo) => {
     const lt = ledgerOf(st), m = it.r.m, p = it.r.p;
-    if (lt === 'annuale') return reuseOf(it, st) ? null : m.iscrizione || null;
-    const per = lt === 'mensile' ? periodo : null;
+    if (it.spMin) return it.spMin;                                              // data del bonifico, se arriva dall'estratto conto
+    if (lt === 'annuale') return reuseOf(it, st) ? null : (m.bonifico && m.bonifico.date) || m.iscrizione || null;
+    const per = lt === 'mensile' ? (st.periodo || periodo) : null;
     const y = lt === 'mensile' ? (Number(per.slice(5, 7)) >= 11 ? Number(per.slice(0, 4)) : Number(per.slice(5, 7)) <= 5 ? Number(per.slice(0, 4)) - 1 : null) : seasonOfDate(st.date);
     const pay = y != null && p.corso && p.corso[y] ? p.corso[y][lt === 'mensile' ? per : 'iscrizione'] : null;
     return pay && pay.status === 'pagato' && pay.at ? localDate(pay.at) : null;
@@ -980,13 +1101,13 @@ function openPrintDialog(keys, opts = {}) {
         const no = st.no;
         const label = st.reuse ? m.receiptLabel : s.receiptPrefix + String(no).padStart(s.receiptDigits, '0');
         if (!st.reuse) maxNew = Math.max(maxNew == null ? 0 : maxNew, no);
-        const per = lt === 'mensile' ? periodo : lt === 'corso' ? String(seasonOfDate(st.date)) : '';
+        const per = lt === 'mensile' ? (st.periodo || periodo) : lt === 'corso' ? String(seasonOfDate(st.date)) : '';
         out.push({ p: it.r.p, m, no, label: label || String(no), quota: st.quota.trim(), method: st.method, date: st.date, tipo: lt, periodo: per });
       }
       out.sort((x, y) => x.no - y.no || x.date.localeCompare(y.date));       // si stampa in ordine di numero
       const receipts = out.map((x) => ({ key: x.m.key, no: x.no, label: x.label, quota: x.quota, method: x.method, date: x.date, tipo: x.tipo, periodo: x.periodo }));
       $('#p-voce-w').hidden = top.tipo !== 'corso';
-      $('#p-per').hidden = !receipts.some((r) => r.tipo === 'mensile');
+      $('#p-per').hidden = !items.some((it) => ledgerTipo(row[it.id]) === 'mensile' && !row[it.id].periodo);
       const hasIscr = receipts.some((r) => r.tipo === 'corso');
       $('#p-corso').hidden = !hasIscr;
       if (hasIscr) $('#p-corso').textContent = `Iscrizione al corso: la stagione si ricava dalla data di ogni ricevuta (${[...new Set(out.filter((x) => x.tipo === 'corso').map((x) => Receipt.seasonLabel(x.periodo)))].join(', ')}).`;
@@ -1218,7 +1339,7 @@ async function patch(keys, p, msg) {
 
 function go(view) {
   App.view = view;
-  if (view === 'calendario' || view === 'impostazioni') App.detailKey = null;
+  if (view === 'calendario' || view === 'impostazioni' || view === 'bonifici') App.detailKey = null;
   if (view === 'avvisi') App.avvisi = null;
   if (view === 'corsisti') { App.corsi = null; App.cs.sel.clear(); }
   if (view === 'dashboard') App.dash = null;
@@ -1380,9 +1501,19 @@ document.addEventListener('click', async (e) => {
         if (App.busy && !confirm('Una lettura del file è in corso. Chiudere comunque?')) break;
         await window.api.quit();
         break;
+      case 'bank-open': { const res = await window.api.bankOpen(); if (res.canceled) break; if (res.needMapping) bkMappingModal(res); else { bkSetResult(res); render(); toast(`${res.proposals.length} bonifici da controllare.`); } break; }
+      case 'bank-ignore': {
+        const p = App.bk.res.proposals.find((x) => x.hash === act.dataset.h);
+        setData(await window.api.bankIgnore([{ hash: p.hash, date: p.date, importo: p.importo, descr: p.descr }]));
+        App.bk.res.proposals = App.bk.res.proposals.filter((x) => x.hash !== p.hash); render(); toast('Non verrà riproposto.');
+        break;
+      }
+      case 'bank-confirm': await bkConfirm(false); break;
+      case 'bank-confirm-print': await bkConfirm(true); break;
+      case 'bank-print-last': closeModal(); openPrintDialog(null, { rows: App.bk.lastRows }); break;
       case 'dash-refresh': App.dash = null; render(); break;
       case 'dash-go': {
-        App.filters = Object.assign({}, App.filters, { q: '', stato: act.dataset.stato || '', scad: act.dataset.filtro || '', stampa: '', corsisti: '' });
+        App.filters = Object.assign({}, App.filters, { q: '', stato: act.dataset.stato || '', scad: act.dataset.filtro || '', stampa: '', corsisti: act.dataset.corsisti || '' });
         go(act.dataset.view);
         break;
       }
@@ -1443,6 +1574,16 @@ document.addEventListener('change', (e) => {
     renderTable();
   } else if (t.hasAttribute('data-cal-hidden')) { App.cal.showHidden = t.checked; render(); }
   else if (t.id === 'm-provider') $('#m-custom').hidden = t.value !== 'altro';
+  else if (t.dataset.bkinc) { App.bk.rows[t.dataset.bkinc].inc = t.checked; render(); }
+  else if (t.id === 'bk-all') { App.bk.res.proposals.forEach((p) => { if (App.bk.rows[p.hash].personId) App.bk.rows[p.hash].inc = t.checked; }); render(); }
+  else if (t.hasAttribute('data-bkall')) bkReload({ all: t.checked }).catch((e) => toast('Errore: ' + e.message));
+  else if (t.dataset.bkv) { App.bk.rows[t.dataset.bkv].target = t.value; render(); }
+  else if (t.dataset.bkp) {
+    const m = /\(ID ([^)]+)\)\s*$/.exec(t.value), st = App.bk.rows[t.dataset.bkp], pr = App.bk.res.proposals.find((x) => x.hash === t.dataset.bkp);
+    st.personId = m && App.data.persons[m[1]] ? m[1] : null;
+    if (st.personId) { const person = App.data.persons[st.personId]; if (!voceOptionsFor(person, pr.date, null).includes(st.target)) st.target = 'tessera'; st.inc = true; } else st.inc = false;
+    render();
+  }
   else if (t.dataset.cssel) { t.checked ? App.cs.sel.add(t.dataset.cssel) : App.cs.sel.delete(t.dataset.cssel); render(); }
   else if (t.id === 'av-all') { App.avvisi.groups.forEach((g) => (t.checked ? App.avSel.add(g.email) : App.avSel.delete(g.email))); render(); }
   else if (t.dataset.avsel) { t.checked ? App.avSel.add(t.dataset.avsel) : App.avSel.delete(t.dataset.avsel); render(); }

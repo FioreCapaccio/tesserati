@@ -49,6 +49,14 @@ function checkStructure(data) {
       for (const [slot, v] of Object.entries(slots)) if (!ok.includes(slot) || !v || !['pagato', 'nondovuto'].includes(v.status)) add(`Anagrafica ${id}: pagamento del corso ${y}/${slot} non valido.`);
     }
   }
+  if (data.bank != null) {
+    if (typeof data.bank !== 'object' || Array.isArray(data.bank)) add('Registro dei bonifici non valido.');
+    else for (const [h, b] of Object.entries(data.bank)) if (!b || !['confermato', 'ignorato'].includes(b.status) || !/^\d{4}-\d{2}-\d{2}$/.test(b.date || '') || !(Number(b.importo) > 0)) add(`Bonifico ${h}: voce non valida.`);
+  }
+  if (data.bankAliases != null) {
+    if (typeof data.bankAliases !== 'object' || Array.isArray(data.bankAliases) || Object.values(data.bankAliases).some((l) => !Array.isArray(l) || l.some((x) => typeof x !== 'string'))) add('Abbinamenti degli ordinanti non validi.');
+  }
+  for (const [key, m] of Object.entries(data.memberships)) if (m && m.bonifico != null && (!/^\d{4}-\d{2}-\d{2}$/.test(m.bonifico.date || '') || typeof m.bonifico.bank !== 'string')) add(`Tessera ${key}: dati del bonifico non validi.`);
   for (const [id, p] of Object.entries(data.persons)) if (p && p.noEmail != null && typeof p.noEmail !== 'boolean') add(`Anagrafica ${id}: esclusione email non valida.`);
   for (const [key, m] of Object.entries(data.memberships)) {
     const r = m && m.reminders;

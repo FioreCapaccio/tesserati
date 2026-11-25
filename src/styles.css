@@ -353,3 +353,16 @@ dl.kv.kv-wide { grid-template-columns: 220px 1fr; margin-top: 8px; }
 .pwarn .e { color: var(--red-tx); } .pwarn .w { color: var(--org-tx); }
 .pissues { background: var(--org-bg); color: var(--org-tx); border: 1px solid var(--org-bd); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
 .page-head p.cap::first-letter { text-transform: uppercase; }
+
+/* Bonifici */
+.bkbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 14px; }
+.bktable td { vertical-align: top; }
+.bktable tbody tr { cursor: default; }
+.bktable .field { min-width: 0; width: 100%; padding: 6px 8px; font-size: 13.5px; }
+.bktable td:nth-child(5) { min-width: 210px; } .bktable td:nth-child(6) { min-width: 190px; }
+.bkdesc { max-width: 420px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13.5px; }
+.bknotes { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.bknotes .warnx { color: var(--org-tx); font-weight: 600; }
+.bk-alta td:first-child { box-shadow: inset 4px 0 0 var(--grn-bd); } .bk-media td:first-child { box-shadow: inset 4px 0 0 var(--yel-bd); } .bk-bassa td:first-child { box-shadow: inset 4px 0 0 var(--red-bd); }
+.bkfoot { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; justify-content: flex-end; padding: 12px 14px; margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.bkfoot span { margin-right: auto; }

@@ -98,8 +98,10 @@ function dashboard(state, today) {
     const list = rec.filter((r) => (r.method || '') === k && amount(r.quota) != null);
     return { metodo: k || 'Non indicato', n: list.length, importo: list.reduce((s, r) => s + amount(r.quota), 0) };
   }).filter((x) => x.n > 0);
+  let bonificiInAttesa = Object.values(state.memberships).filter((m) => m.bonifico && m.bonifico.receipt == null && persons[m.personId]).length;
+  for (const p of Object.values(persons)) for (const slots of Object.values(p.corso || {})) for (const v of Object.values(slots)) if (v.bank && v.no == null) bonificiInAttesa++;
   const ric = {
-    anno: year, emesse: rec.length, senzaImporto: rec.filter((r) => amount(r.quota) == null).length,
+    bonificiInAttesa, anno: year, emesse: rec.length, senzaImporto: rec.filter((r) => amount(r.quota) == null).length,
     totale: perTipo.reduce((s, x) => s + x.importo, 0), perTipo, perMetodo,
     daStampare: Object.values(state.memberships).filter((m) => !m.printed && persons[m.personId]).length,
     prossimoNumero: state.settings.nextReceipt,
@@ -111,6 +113,7 @@ function dashboard(state, today) {
   const lastImport = state.imports[state.imports.length - 1] || null;
 
   const attenzione = [
+    { id: 'bonifici', n: bonificiInAttesa, testo: 'bonifici confermati in attesa di ricevuta', view: 'lista', corsisti: 'bonifico' },
     { id: 'stampare', n: ric.daStampare, testo: 'ricevute da stampare', view: 'stampare' },
     { id: 'avvisi', n: pronti, testo: 'avvisi di rinnovo pronti da inviare', view: 'avvisi' },
     { id: 'corsisti', n: cors.scaduti, testo: 'pagamenti dei corsisti scaduti e non pagati', view: 'corsisti' },

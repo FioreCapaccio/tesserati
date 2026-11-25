@@ -30,7 +30,12 @@ I dati restano solo sul computer.
    La rata mensile scade il **1° di ogni mese**; a novembre c'è anche l'**iscrizione al corso** (importo predefinito in Impostazioni).
    Si segna *pagato* a mano (vista Mese o Stagione) oppure in automatico stampando la ricevuta *Corso* (rata del mese o iscrizione).
    Colori: verde pagato, rosso scaduto non pagato, arancione/giallo in arrivo, grigio più avanti, tratteggiato non dovuto.
-9. **Calendario tesserati**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
+9. **Bonifici** (menu *Bonifici*): carica l'**estratto conto** della banca (PDF, Excel .xlsx o CSV). L'app trova le entrate che sono bonifici, le **abbina ai tesserati**
+   (nome nella causale; se paga un genitore o un altro, si sceglie la persona e l'app ricorda quell'ordinante), propone la voce (tessera, rata del mese, iscrizione al corso)
+   e mostra un'**affidabilità**. Controlli e *Conferma*: i corsisti risultano pagati **con la data del bonifico**, la tessera riceve importo e metodo *Bonifico*;
+   *Conferma e prepara le ricevute* apre la stampa già compilata. Il file è solo letto: non viene copiato né salvato, restano solo i bonifici confermati o ignorati.
+   Per i PDF verifica che i movimenti **quadrino con i saldi** dell'estratto. I bonifici in attesa di ricevuta sono evidenziati (badge, filtro nell'elenco, Dashboard).
+10. **Calendario tesserati**: vista mese/anno; rosso = scaduta, arancione ≤ 30 gg, giallo ≤ 90 gg, verde oltre
    (soglie modificabili). L'occhio barrato rimuove una tessera dal calendario (resta nell'archivio).
 
 ## Sviluppo

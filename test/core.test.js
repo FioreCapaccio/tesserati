@@ -527,6 +527,200 @@ console.log(`\n${n} test superati`);
   }
 }
 
+// ---- Estratto conto: bonifici ----
+{
+  const K = require('../core/bank');
+  const C = require('../core/corsi');
+  const B = require('../core/backup');
+  const { readStatement } = require('../core/bankfile');
+  const TODAY = '2026-10-12';
+  const rec = (id, nome, cognome, o = {}) => ({ id, nome, cognome, nascita: '1990-06-15', provNascita: '', cf: 'F' + id, email: `u${id}@x.it`, cell: '', indirizzo: '', citta: 'Pescara', iscrizione: '2026-01-10', iscrizioneOra: '', scadenza: '2027-01-09', stato: 'Attivo' });
+  const mkState = () => {
+    const s = S.emptyState();
+    S.importRecords(s, [rec('1', 'Anna Maria', 'Rossi'), rec('2', 'Zoe', 'Neri'), rec('3', 'Luca', 'De Luca'), rec('4', 'Paolo', 'Verdi'), rec('5', 'Marta', 'Verdi')], {});
+    S.updatePerson(s, '1', { corsista: true }); S.updatePerson(s, '2', { corsista: true });
+    S.saveSettings(s, { ...s.settings, defaultQuota: '20', defaultRetta: '125', defaultIscrizioneCorso: '80' });
+    return s;
+  };
+  const mv = (date, avere, descr) => ({ date, valuta: date, dare: null, avere, descr });
+  const an = (s, ...m) => K.analyze(s, { movements: m }).proposals;
+
+  // frammenti nel formato del PDF: intestazione a y=560; la riga con data e importo sta in mezzo alle righe della descrizione
+  const T = (s, x, y, w = 20) => ({ s, x, y, w });
+  const header = [T('DATA', 37, 560, 22), T('VALUTA', 72, 560, 32), T('MOV.DARE', 112, 560, 43), T('MOV.AVERE', 160, 560, 48), T('DESCRIZIONE OPERAZIONI', 213, 560, 107)];
+  t('estratto PDF: righe, colonne dare/avere, descrizione su due righe, saldi', () => {
+    const page = [...header,
+      T('30/06/26', 31, 549, 36), T('********', 70, 549, 40), T('2.500,00', 173, 549, 36), T('SALDO INIZIALE', 212, 549, 60),
+      T('Bonifico a vs favore *ROSSI ANNA MARIA Quota rata gennaio', 212, 540, 250), T('01/07/26', 31, 535, 36), T('01/07/26', 70, 535, 36), T('1.000,00', 173, 535, 36), T('ANNO 2026', 212, 531, 50),
+      T('Imposta di bollo', 212, 485, 70), T('01/07/26', 31, 485, 36), T('30/06/26', 70, 485, 36), T('29,50', 135, 485, 20),
+      T('30/09/26', 31, 400, 36), T('********', 70, 400, 40), T('3.470,50', 173, 400, 36), T('SALDO FINALE', 212, 400, 60),
+      T('01/07/2026', 440, 300, 50)];                       // data in un'altra zona della pagina: non è un movimento
+    const r = K.parsePdfTokens([page, header]);              // la seconda pagina ha solo l'intestazione
+    assert.strictEqual(r.movements.length, 2);
+    assert.deepStrictEqual(r.movements[0], { date: '2026-07-01', valuta: '2026-07-01', dare: null, avere: 1000, descr: 'Bonifico a vs favore *ROSSI ANNA MARIA Quota rata gennaio ANNO 2026' });
+    assert.deepStrictEqual([r.movements[1].dare, r.movements[1].avere, r.movements[1].valuta], [29.5, null, '2026-06-30']);
+    assert.deepStrictEqual([r.saldoIniziale, r.saldoFinale], [2500, 3470.5]);
+    assert.deepStrictEqual(K.reconcile(r), { ok: true, saldoIniziale: 2500, saldoFinale: 3470.5, entrate: 1000, uscite: 29.5, differenza: 0 });
+    assert.strictEqual(K.reconcile({ movements: r.movements, saldoIniziale: 1, saldoFinale: 2 }).ok, false);
+    assert.strictEqual(K.reconcile({ movements: [], saldoIniziale: null, saldoFinale: null }), null);
+  });
+  t('estratto: importi e date in formato italiano e di Excel', () => {
+    assert.deepStrictEqual(['1.000,00', '-12,5', '375,00', ' € 40 ', '', 'x', 7].map(K.money), [1000, -12.5, 375, 40, null, null, 7]);
+    assert.deepStrictEqual(['05/10/2026', '5/10/26', '2026-10-05', '05.10.2026'].map(K.isoDate), ['2026-10-05', '2026-10-05', '2026-10-05', '2026-10-05']);
+    assert.strictEqual(K.isoDate(new Date('2026-10-05T00:00:00Z')), '2026-10-05');
+    assert.strictEqual(K.isoDate(46300), '2026-10-05');    // numero seriale di Excel
+    assert.strictEqual(K.isoDate('boh'), null);
+  });
+  t('estratto Excel/CSV: intestazioni diverse, colonna con segno, colonne da indicare a mano', () => {
+    const a = K.parseTable([['Estratto'], [], ['Data', 'Causale', 'Dare', 'Avere'], ['05/10/2026', 'Bonifico da X', '', '10,00'], ['06/10/2026', 'Commissioni', '0,69', ''], ['totale', '', '', '']]);
+    assert.deepStrictEqual(a.movements.map((m) => [m.date, m.dare, m.avere]), [['2026-10-05', null, 10], ['2026-10-06', 0.69, null]]);
+    const b = K.parseTable([['Data valuta', 'Data contabile', 'Descrizione', 'Importo'], ['06/10/2026', '05/10/2026', 'Bonifico da X', '1.250,50'], ['07/10/2026', '07/10/2026', 'Spesa', '-3,00']]);
+    assert.deepStrictEqual(b.movements.map((m) => [m.date, m.dare, m.avere]), [['2026-10-05', null, 1250.5], ['2026-10-07', 3, null]]);   // "data contabile" è la data del movimento
+    const c = K.parseTable([['colA', 'colB', 'colC'], ['05/10/2026', 'Bonifico da X', '10,00']]);
+    assert.ok(c.needMapping && c.headers.length === 3);
+    const d = K.parseTable([['colA', 'colB', 'colC'], ['05/10/2026', 'Bonifico da X', '10,00']], { headerRow: 0, data: 0, descr: 1, importo: 2 });
+    assert.deepStrictEqual(d.movements.map((m) => [m.date, m.avere, m.descr]), [['2026-10-05', 10, 'Bonifico da X']]);
+  });
+  t('abbinamento: nome nel bonifico, mese nella causale, fiducia alta', () => {
+    const s = mkState();
+    const [p] = an(s, mv('2026-07-01', 125, 'Bonifico a vs favore *INST 09:17 ROSSI ANNA MARIA v5PgRm Quota 3a rata gennaio - Anna Ro-'));
+    assert.strictEqual(p.personId, '1');
+    assert.deepStrictEqual(p.target, { kind: 'rata', ym: '2026-01', season: 2025 });   // gennaio pagato a luglio = gennaio scorso
+    assert.strictEqual(p.confidence, 'alta');
+    assert.deepStrictEqual(p.warn, []);
+    assert.ok(p.reasons.some((r) => /gennaio/.test(r)));
+    assert.ok(!/INST|Bonifico a vs/.test(p.descr));
+    const [q] = an(s, mv('2026-10-20', 125, 'Bonifico a vs favore *Rossi Anna Maria rata novembre'));
+    assert.deepStrictEqual(q.target, { kind: 'rata', ym: '2026-11', season: 2026 });     // novembre pagato a ottobre = prossimo novembre
+  });
+  t('abbinamento: nome invertito, cognome composto, solo cognome = fiducia bassa, omonimi', () => {
+    const s = mkState();
+    assert.strictEqual(an(s, mv('2026-10-05', 20, 'Bonifico a vs favore *LUCA DE LUCA tessera'))[0].personId, '3');
+    const v = an(s, mv('2026-10-05', 20, 'Bonifico a vs favore *VERDI Quota annuale'))[0];            // due Verdi: nessun nome
+    assert.strictEqual(v.confidence, 'bassa'); assert.strictEqual(v.candidates.length, 2); assert.ok(v.candidates.every((c) => c.how === 'cognome'));
+    assert.strictEqual(an(s, mv('2026-10-05', 20, 'Bonifico a vs favore *Qualcuno Sconosciuto'))[0].personId, null);
+    assert.strictEqual(an(s, mv('2026-10-05', 20, 'Bonifico a vs favore *VERDI PAOLO tessera'))[0].personId, '4');
+  });
+  t('abbinamento: voce suggerita dall\'importo e avvisi sull\'importo', () => {
+    const s = mkState();
+    assert.deepStrictEqual(an(s, mv('2026-10-05', 20, 'Bonifico a vs favore *VERDI PAOLO'))[0].target, { kind: 'tessera' });
+    const r = an(s, mv('2026-10-05', 125, 'Bonifico a vs favore *ROSSI ANNA MARIA'))[0];
+    assert.deepStrictEqual(r.target, { kind: 'rata', ym: '2026-11', season: 2026 });                  // prima rata non pagata
+    const i = an(s, mv('2026-10-05', 80, 'Bonifico a vs favore *ROSSI ANNA MARIA'))[0];
+    assert.deepStrictEqual(i.target, { kind: 'iscrizione', season: 2026 });
+    const m = an(s, mv('2026-10-05', 250, 'Bonifico a vs favore *ROSSI ANNA MARIA rata dicembre'))[0];
+    assert.ok(m.warn.some((w) => /più voci insieme/.test(w)));
+    assert.ok(an(s, mv('2026-10-05', 33, 'Bonifico a vs favore *VERDI PAOLO tessera'))[0].warn.length === 1);
+  });
+  t('abbinamento: solo le entrate che sembrano bonifici; "tutte le entrate" include il resto', () => {
+    const s = mkState();
+    const ms = [mv('2026-10-05', 20, 'Bonifico a vs favore *VERDI PAOLO'), mv('2026-10-05', 55, 'Incassi PagoBancomat 05.10.26'), mv('2026-10-05', 40, 'Bonifico a vs favore *INST 11:00 X Inviato da myPOS saldo'), { date: '2026-10-05', dare: 9, avere: null, descr: 'Bonifico a favore di *Fornitore' }];
+    assert.strictEqual(K.analyze(s, { movements: ms }).proposals.length, 2);
+    assert.strictEqual(K.analyze(s, { movements: ms }, { all: true }).proposals.length, 3);
+  });
+  t('conferma: corsista pagato con la data del bonifico, tessera con quota e metodo', () => {
+    const s = mkState();
+    const ps = an(s, mv('2026-10-05', 125, 'Bonifico a vs favore *ROSSI ANNA MARIA rata novembre'), mv('2026-10-06', 20, 'Bonifico a vs favore *VERDI PAOLO tessera'));
+    const r = K.applyBank(s, ps.map((p) => ({ ...p, targetKey: K.targetKey(p.target) })));
+    assert.deepStrictEqual([r.done.length, r.errors.length], [2, 0]);
+    const pay = C.getPay(s.persons['1'], 2026, '2026-11');
+    assert.deepStrictEqual([pay.status, pay.at.slice(0, 10), pay.method, pay.importo, pay.manual, !!pay.bank], ['pagato', '2026-10-05', 'Bonifico', 125, false, true]);
+    const m = s.memberships['4_2026-01-10'];
+    assert.deepStrictEqual([m.bonifico.date, m.paymentMethod, m.quota], ['2026-10-06', 'Bonifico', '20']);
+    assert.deepStrictEqual(r.rows.map((x) => [x.tipo, x.voce || null, x.periodo || null, x.quota, x.method, x.minDate]), [['corso', 'rata', '2026-11', '125', 'Bonifico', '2026-10-05'], ['annuale', null, null, '20', 'Bonifico', '2026-10-06']]);
+    assert.strictEqual(C.items(s, 2026, TODAY).find((i) => i.personId === '1' && i.slot === '2026-11').bank, true);
+    // la ricevuta stampata dopo non cancella data e dati del bonifico
+    S.commitPrint(s, [{ key: '1_2026-01-10', no: 9, label: '9', quota: '125', method: 'Bonifico', date: '2026-10-12', tipo: 'mensile', periodo: '2026-11' }], 10);
+    const after = C.getPay(s.persons['1'], 2026, '2026-11');
+    assert.deepStrictEqual([after.at.slice(0, 10), after.no, after.bank, after.manual], ['2026-10-05', 9, pay.bank, false]);
+    assert.ok(B.verifyBackup(B.makeBackup(s, '1.7.0')).ok);
+  });
+  t('conferma: errori chiari (voce non valida, tesserato sconosciuto) e nulla registrato', () => {
+    const s = mkState();
+    const base = { hash: 'h1', date: '2026-10-05', importo: 125, descr: 'x', payerKey: '' };
+    const r = K.applyBank(s, [{ ...base, hash: 'h2', personId: '1', targetKey: 'rata:2026-10' }, { ...base, hash: 'h3', personId: '99', targetKey: 'tessera' }]);
+    assert.strictEqual(r.done.length, 0); assert.strictEqual(r.errors.length, 2);
+    assert.ok(/voce non valida/.test(r.errors[0]) && /non trovato/.test(r.errors[1]));
+    assert.deepStrictEqual(s.bank, {});                                                                // nulla è stato registrato
+    assert.deepStrictEqual([K.targetKey(K.parseTargetKey('rata:2027-01')), K.parseTargetKey('rata:2026-10'), K.parseTargetKey('boh')], ['rata:2027-01', null, null]);
+  });
+  t('conferma: chi paga una rata diventa corsista; tessera già stampata = nuova ricevuta, non ristampa', () => {
+    const s = mkState();
+    const p = an(s, mv('2026-07-01', 125, 'Bonifico a vs favore *VERDI PAOLO Quota 3a rata gennaio'))[0];     // Paolo non è corsista
+    assert.deepStrictEqual(p.target, { kind: 'rata', ym: '2026-01', season: 2025 });
+    const r = K.applyBank(s, [{ ...p, targetKey: K.targetKey(p.target) }]);
+    assert.deepStrictEqual([r.done.length, r.diventati, s.persons['4'].corsista], [1, ['Verdi Paolo'], true]);
+    assert.strictEqual(C.getPay(s.persons['4'], 2025, '2026-01').status, 'pagato');
+    const t2 = K.applyBank(s, [{ hash: 'x9', date: '2026-10-06', importo: 20, descr: 'x', payerKey: '', personId: '3', targetKey: 'tessera' }]);
+    assert.strictEqual(t2.rows[0].fresh, true);                                                              // la tessera 3 risulta già stampata (primo import)
+    const k = '3_2026-01-10';
+    assert.strictEqual(s.memberships[k].bonifico.receipt, undefined);
+    S.commitPrint(s, [{ key: k, no: 31, label: '31', quota: '20', method: 'Bonifico', date: '2026-10-12', tipo: 'annuale' }], 32);
+    assert.strictEqual(s.memberships[k].bonifico.receipt, 31);                                               // ora ha la sua ricevuta
+    assert.strictEqual(require('../core/stats').dashboard(s, TODAY).ricevute.bonificiInAttesa, 1);          // resta la rata di gennaio di Paolo, pagata ma senza ricevuta
+  });
+  t('memoria: il genitore che paga per il figlio viene ricordato; doppioni e ignorati non tornano', () => {
+    const s = mkState();
+    const first = an(s, mv('2026-10-05', 125, 'Bonifico a vs favore *BIANCHI LUISA Campus estivo Neri Zoe'))[0];
+    assert.deepStrictEqual([first.personId, first.candidates[0].how], ['2', 'nome']);                    // trova il figlio nel testo
+    K.applyBank(s, [{ ...first, targetKey: 'rata:2026-11' }]);
+    assert.deepStrictEqual(s.bankAliases, { 'bianchi luisa': ['2'] });
+    const next = an(s, mv('2026-11-04', 125, 'Bonifico a vs favore *BIANCHI LUISA rata dicembre'))[0];     // il nome del figlio non c'è più
+    assert.deepStrictEqual([next.personId, next.candidates[0].how, next.target.ym], ['2', 'alias', '2026-12']);
+    // lo stesso estratto caricato due volte
+    assert.strictEqual(K.analyze(s, { movements: [mv('2026-10-05', 125, 'Bonifico a vs favore *BIANCHI LUISA Campus estivo Neri Zoe')] }).registrati, 1);
+    // due bonifici identici nello stesso giorno restano due movimenti distinti
+    const twin = an(s, mv('2026-10-09', 20, 'Bonifico a vs favore *VERDI PAOLO'), mv('2026-10-09', 20, 'Bonifico a vs favore *VERDI PAOLO'));
+    assert.strictEqual(twin.length, 2); assert.notStrictEqual(twin[0].hash, twin[1].hash);
+    K.ignoreBank(s, [twin[0]]);
+    const again = an(s, mv('2026-10-09', 20, 'Bonifico a vs favore *VERDI PAOLO'), mv('2026-10-09', 20, 'Bonifico a vs favore *VERDI PAOLO'));
+    assert.strictEqual(again.length, 1);
+    assert.ok(B.verifyBackup(B.makeBackup(s, '1.7.0')).ok);
+  });
+  t('bonifici: archivio nuovo e backup con strutture non valide', () => {
+    const e = S.emptyState();
+    assert.deepStrictEqual([e.bank, e.bankAliases], [{}, {}]);
+    const s = mkState();
+    K.applyBank(s, [{ hash: 'abc', date: '2026-10-06', importo: 20, descr: 'x', payerKey: 'verdi paolo', personId: '4', targetKey: 'tessera' }]);
+    const bk = B.makeBackup(s, '1.7.0');
+    assert.ok(B.verifyBackup(JSON.parse(JSON.stringify(bk))).ok);
+    const bad = (fn) => { const x = JSON.parse(JSON.stringify(bk)); fn(x.data); x.sha256 = B.sha256(JSON.stringify(x.data)); return B.verifyBackup(x); };
+    assert.ok(!bad((d) => { d.bank.abc.status = 'boh'; }).ok);
+    assert.ok(!bad((d) => { d.bank.abc.date = 'ieri'; }).ok);
+    assert.ok(!bad((d) => { d.bankAliases = { x: 'nope' }; }).ok);
+    assert.ok(!bad((d) => { d.memberships['4_2026-01-10'].bonifico.bank = 5; }).ok);
+    const old = JSON.parse(JSON.stringify(bk)); delete old.data.bank; delete old.data.bankAliases; old.sha256 = B.sha256(JSON.stringify(old.data));
+    assert.ok(B.verifyBackup(old).ok);
+  });
+
+  // ---- file veri: Excel/CSV di prova e il PDF del campione (saltato se non c'è) ----
+  (async () => {
+    const x = await readStatement(path.join(__dirname, 'fixtures', 'estratto-prova.xlsx'));
+    t('file: Excel di prova — colonne riconosciute da sole', () => {
+      assert.deepStrictEqual(x.movements.map((m) => [m.date, m.avere, m.dare]), [['2026-10-05', 125, null], ['2026-10-06', 80, null], ['2026-10-07', null, 0.69], ['2026-10-08', 55, null]]);
+    });
+    const c = await readStatement(path.join(__dirname, 'fixtures', 'estratto-prova.csv'));
+    t('file: CSV di prova con punto e virgola e importo con segno', () => {
+      assert.deepStrictEqual(c.movements.map((m) => [m.date, m.avere, m.dare]), [['2026-10-05', 125, null], ['2026-10-07', null, 0.69], ['2026-10-09', 20, null]]);
+    });
+    const pdf = path.join(__dirname, '..', '..', 'estratto.PDF');
+    if (fs.existsSync(pdf)) {
+      const p = await readStatement(pdf);
+      t('file: PDF campione BCC — quadratura al centesimo e bonifici trovati', () => {
+        const q = K.reconcile(p);
+        assert.ok(q.ok, JSON.stringify(q));
+        assert.deepStrictEqual([q.saldoIniziale, q.entrate, q.uscite, q.saldoFinale], [2500, 1000, 29.5, 3470.5]);
+        assert.strictEqual(p.movements.length, 128);
+        const inc = p.movements.filter((m) => m.avere > 0 && K.isBonifico(m.descr));
+        assert.strictEqual(inc.length, 9);
+        assert.ok(inc.every((m) => /^\d{4}-\d{2}-\d{2}$/.test(m.date) && m.descr.length > 10));
+        console.log(`   PDF campione: ${p.movements.length} movimenti, quadratura ${q.differenza === 0 ? 'ok' : 'NO'}, ${inc.length} bonifici in entrata`);
+      });
+    }
+    console.log(`\n${n} test superati (con i file veri)`);
+  })().catch((e) => { console.error(e); process.exit(1); });
+}
+
 // ---- Ricerca del CSV nella cartella Download ----
 {
   const os = require('os');

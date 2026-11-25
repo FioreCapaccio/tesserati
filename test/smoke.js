@@ -67,7 +67,7 @@ module.exports = ({ win, state, saveState, S, app }) => {
       // ---- numerazione per data ----
       const dnum = () => js(`[...document.querySelectorAll('[data-rn]')].map(e=>e.value)`);
       const nums0 = await dnum();
-      await js(`(()=>{const i=document.querySelector('[data-rd]');i.value='2026-10-20';i.dispatchEvent(new Event('input',{bubbles:true}));})()`); await wait(300);
+      await js(`(()=>{const i=document.querySelector('[data-rd]');i.value='2030-01-20';i.dispatchEvent(new Event('input',{bubbles:true}));})()`); await wait(300);
       const nums1 = await dnum();
       await js(`(()=>{const i=document.querySelectorAll('[data-rn]')[1];i.value='130';i.dispatchEvent(new Event('input',{bubbles:true}));})()`); await wait(300);
       const nums2 = await dnum();
@@ -77,7 +77,7 @@ module.exports = ({ win, state, saveState, S, app }) => {
       const dupRow = await js(`[...document.querySelectorAll('.pwarn')].map(e=>e.textContent.trim()).filter(Boolean)[0] || ''`);
       await js(`document.getElementById('p-recalc').click()`); await wait(400);
       const nums3 = await dnum();
-      log('numeri: iniziali =', JSON.stringify(nums0), '| 1ª riga spostata al 20/10 =', JSON.stringify(nums1), '| 2ª scritta a mano 130 =', JSON.stringify(nums2), JSON.stringify(manuale), '| doppione 130 =>', dupMsg, '|', dupRow.slice(0, 70), '| dopo "ricalcola" =', JSON.stringify(nums3));
+      log('numeri: iniziali =', JSON.stringify(nums0), '| 1ª riga spostata al 2030 =', JSON.stringify(nums1), '| 2ª scritta a mano 130 =', JSON.stringify(nums2), JSON.stringify(manuale), '| doppione 130 =>', dupMsg, '|', dupRow.slice(0, 70), '| dopo "ricalcola" =', JSON.stringify(nums3));
       await shot('04-dialogo-stampa');
       const html = await js(`openPrintDialog.current.html`);
       const nextNo = await js(`openPrintDialog.current.nextReceipt`);
@@ -196,6 +196,38 @@ module.exports = ({ win, state, saveState, S, app }) => {
       const cp = st.persons['9000002'].corso['2026'];
       log('dopo la stampa: iscrizione =', cp.iscrizione.status, 'n°', cp.iscrizione.no, '| novembre =', cp['2026-11'].status, 'n°', cp['2026-11'].no, '| automatico =', cp['2026-11'].manual === false);
       await shot('28-corsisti-dopo-stampa');
+
+      // ---- bonifici da estratto conto ----
+      await js(`document.querySelector('[data-nav=bonifici]').click()`); await wait(400);
+      await shot('29-bonifici-vuoto');
+      await js(`document.querySelector('[data-act=bank-open]').click()`); await wait(4000);
+      const bres = await js(`App.bk && ({n: App.bk.res.proposals.length, reg: App.bk.res.registrati, mov: App.bk.res.movimenti, q: App.bk.res.quadratura && App.bk.res.quadratura.ok, conf: App.bk.res.proposals.map(p=>p.confidence)})`);
+      log('estratto:', JSON.stringify(bres));
+      log('abbinati =', JSON.stringify(await js(`App.bk.res.proposals.filter(p=>p.personId).map(p=>({imp:p.importo, a:App.data.persons[p.personId].cognome+' '+App.data.persons[p.personId].nome, how:p.candidates[0].how, voce:App.bk.rows[p.hash].target, c:p.confidence}))`)));
+      await shot('30-bonifici-proposte');
+      // i tesserati abbinati devono essere corsisti per le rate: li segno e confermo
+      const matched = await js(`App.bk.res.proposals.filter(p=>p.personId && App.bk.rows[p.hash].inc).map(p=>p.personId)`);
+      for (const id of matched) S.updatePerson(st, id, { corsista: true });
+      saveState();
+      await js(`window.api.getState().then(r=>{setData(r);render()})`); await wait(400);
+      if (matched.length) {
+        await js(`document.querySelector('[data-act=bank-confirm-print]').click()`); await wait(1500);
+        log('dopo conferma: bonifici registrati =', Object.values(st.bank).filter((b) => b.status === 'confermato').length, '| alias salvati =', JSON.stringify(Object.keys(st.bankAliases)));
+        log('stampa dai bonifici: righe =', await js(`openPrintDialog.current.receipts.map(r=>r.tipo+':'+(r.periodo||'-')+':'+r.quota+':'+r.method+':'+r.date)`).then(JSON.stringify), '| avvisi =', await js(`openPrintDialog.current.issues.length`));
+        await shot('31-stampa-da-bonifici');
+        await js(`closeModal()`);
+        await js(`window.api.dashboardData().then(d=>window.__dd=d)`); await wait(300);
+        log('dashboard: bonifici in attesa di ricevuta =', await js(`window.__dd.ricevute.bonificiInAttesa`), '| da fare =', await js(`window.__dd.attenzione.filter(x=>x.id==='bonifici').map(x=>x.n).join()`));
+        // lo stesso estratto una seconda volta: non deve riproporre quelli registrati
+        await js(`document.querySelector('[data-nav=bonifici]').click()`); await wait(300);
+        await js(`document.querySelector('[data-act=bank-open]').click()`); await wait(4000);
+        log('stesso estratto ricaricato: da controllare =', await js(`App.bk.res.proposals.length`), '| già registrati =', await js(`App.bk.res.registrati`));
+        const pid = matched[0];
+        await js(`document.querySelector('[data-nav=lista]').click()`); await wait(300);
+        await js(`App.filters.corsisti='bonifico';render()`); await wait(300);
+        log('filtro "bonifico da stampare": righe =', await js(`document.querySelectorAll('#tbody tr').length`));
+        await js(`App.filters.corsisti='';render()`);
+      }
 
       // ---- avvisi email (trasporto finto: nessuna rete) ----
       st.settings.mail.user = 'associazione@gmail.com'; st.settings.mail.fromName = 'Il Sipario'; saveState();

@@ -10,6 +10,8 @@ const R = require('./core/reminders');
 const P = require('./core/people');
 const C = require('./core/corsi');
 const D = require('./core/stats');
+const K = require('./core/bank');
+const { readStatement } = require('./core/bankfile');
 const M = require('./core/mailer');
 
 const COPYRIGHT = `© ${new Date().getFullYear()} Fioravante Capaccio`;
@@ -260,6 +262,22 @@ handle('archive:change', async ({ reset }) => {
 });
 
 handle('dashboard:data', () => D.dashboard(state, localIso()));
+
+// ---------- Estratto conto: bonifici ----------
+handle('bank:open', async ({ file: given, mapping, all } = {}) => {
+  let file = given || (process.env.TESSERATI_SMOKE && process.env.TESSERATI_BANK_FILE) || null;   // la variabile serve solo ai test automatici
+  if (!file) {
+    const r = await dialog.showOpenDialog(win, { title: 'Scegli l\'estratto conto della banca', defaultPath: app.getPath('downloads'), properties: ['openFile'], filters: [{ name: 'Estratto conto', extensions: ['pdf', 'xlsx', 'csv', 'txt'] }, { name: 'Tutti i file', extensions: ['*'] }] });
+    if (r.canceled || !r.filePaths[0]) return { canceled: true };
+    file = r.filePaths[0];
+  }
+  const parsed = await readStatement(file, mapping);                // il file si legge e basta: non viene copiato né salvato
+  const name = path.basename(file);
+  if (parsed.needMapping) return { file, name, needMapping: true, headers: parsed.headers, headerRow: parsed.headerRow };
+  return { file, name, kind: parsed.kind, all: !!all, mapping: parsed.mapping || null, ...K.analyze(state, parsed, { all: !!all }) };
+});
+handle('bank:confirm', ({ items }) => { const r = K.applyBank(state, items); saveState(); return { ...r, ...snapshot() }; });
+handle('bank:ignore', ({ items }) => { K.ignoreBank(state, items); saveState(); return snapshot(); });
 
 // ---------- Calendario corsisti ----------
 handle('corsi:data', ({ season } = {}) => {

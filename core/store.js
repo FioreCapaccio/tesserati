@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS = {
 };
 
 function emptyState() {
-  return { version: 1, settings: structuredClone(DEFAULT_SETTINGS), persons: {}, memberships: {}, imports: [], mailLog: [], trash: {}, receipts: [] };
+  return { version: 1, settings: structuredClone(DEFAULT_SETTINGS), persons: {}, memberships: {}, imports: [], mailLog: [], trash: {}, receipts: [], bank: {}, bankAliases: {} };
 }
 
 function normalizeState(s) {
@@ -44,6 +44,8 @@ function normalizeState(s) {
   out.mailLog = Array.isArray(out.mailLog) ? out.mailLog : [];
   out.trash = out.trash && typeof out.trash === 'object' ? out.trash : {};
   out.receipts = Array.isArray(out.receipts) ? out.receipts : [];
+  out.bank = out.bank && typeof out.bank === 'object' && !Array.isArray(out.bank) ? out.bank : {};
+  out.bankAliases = out.bankAliases && typeof out.bankAliases === 'object' && !Array.isArray(out.bankAliases) ? out.bankAliases : {};
   return out;
 }
 
@@ -179,6 +181,7 @@ function commitPrint(state, receipts, nextReceipt, now = new Date()) {
       m.quota = r.quota || '';
       m.paymentMethod = method;
       m.receiptDate = r.date || '';
+      if (m.bonifico) m.bonifico.receipt = r.no;   // il bonifico ora ha la sua ricevuta
       if (!state.receipts.some((x) => x.tipo === 'annuale' && x.key === r.key && x.no === r.no)) state.receipts.push(entry);
     } else {
       state.receipts.push(entry);
