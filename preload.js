@@ -40,4 +40,5 @@ contextBridge.exposeInMainWorld('api', {
   applyBackup: (path) => call('backup:apply', { path }),
   showDataFile: () => call('shell:showData'),
   print: (payload) => call('print:run', payload),
+  printCommit: (payload) => call('print:commit', payload),
 });

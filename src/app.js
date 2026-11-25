@@ -1079,7 +1079,7 @@ function openPrintDialog(keys, opts = {}) {
       </div>
       <div class="preview" id="pv"></div>
     </div></div>
-    <footer><span class="note">Dopo la stampa la tessera risulta “stampata” (solo per la ricevuta della tessera) e il progressivo avanza.</span>
+    <footer><span class="note">Dopo la stampa ti chiedo conferma: solo con il “Sì” la tessera risulta “stampata” (per la ricevuta della tessera) e il progressivo avanza.</span>
       <button class="btn" data-act="close-modal">Annulla</button>
       <button class="btn" data-act="do-print" data-mode="pdf">Salva PDF…</button>
       <button class="btn primary" data-act="do-print" data-mode="print">${ICON.print} Stampa</button></footer></div>`, () => {
@@ -1325,15 +1325,34 @@ async function doPrint(mode) {
   try {
     const res = await window.api.print({ html: cur.html, mode, receipts: cur.receipts, nextReceipt: cur.nextReceipt });
     if (res.canceled) { toast('Stampa annullata: nessuna tessera segnata.'); btns.forEach((b) => (b.disabled = false)); return; }
-    setData(res);
-    closeModal();
-    App.sel.clear();
-    render();
-    toast(mode === 'pdf' ? `PDF salvato · ${cur.receipts.length} tessere segnate come stampate` : `${cur.receipts.length} tessere segnate come stampate`);
+    btns.forEach((b) => (b.disabled = false));
+    askPrintedConfirm(cur, mode);
   } catch (e) {
     btns.forEach((b) => (b.disabled = false));
     toast('Errore: ' + e.message);
   }
+}
+
+// Conferma reale: la stampa non basta (potrebbe essere solo un'anteprima), le ricevute si segnano solo se l'utente lo dice.
+function askPrintedConfirm(cur, mode) {
+  const n = cur.receipts.length, tx = n === 1 ? '1 ricevuta' : `${n} ricevute`;
+  const el = document.createElement('div');
+  el.className = 'overlay'; el.style.zIndex = 60;
+  el.innerHTML = `<div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="pc-t"><header><h2 id="pc-t">${mode === 'pdf' ? 'PDF salvato: le ricevute sono state emesse?' : 'Le ricevute sono state stampate davvero?'}</h2></header>
+    <div class="mbody"><p style="margin:0">Se hai solo guardato l’anteprima, scegli “No”: nulla verrà segnato e potrai stampare di nuovo. Con “Sì” segno ${tx} come stampate e assegno i numeri.</p></div>
+    <footer><button class="btn" data-pc="no">No, non segnare</button><button class="btn primary" data-pc="yes">Sì, stampate: segna</button></footer></div>`;
+  document.body.appendChild(el);
+  el.querySelector('[data-pc=yes]').focus();
+  el.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-pc]'); if (!b) return;
+    if (b.dataset.pc === 'no') { el.remove(); toast('Nessuna ricevuta segnata come stampata.'); return; }
+    b.disabled = true;
+    try {
+      setData(await window.api.printCommit({ receipts: cur.receipts, nextReceipt: cur.nextReceipt }));
+      el.remove(); closeModal(); App.sel.clear(); render();
+      toast(`${tx} segnate come stampate`);
+    } catch (err) { b.disabled = false; toast('Errore: ' + err.message); }
+  });
 }
 
 // ======================= Azioni =======================

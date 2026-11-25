@@ -377,21 +377,27 @@ async function withPrintWindow(html, fn) {
 
 handle('print:run', async ({ html, mode, receipts, nextReceipt }) => {
   if (!receipts || !receipts.length) throw new Error('Nessuna ricevuta da stampare.');
-  const done = () => { S.commitPrint(state, receipts, nextReceipt); saveState(); return snapshot(); };
 
   if (mode === 'pdf') {
     const r = await dialog.showSaveDialog(win, { title: 'Salva ricevute in PDF', defaultPath: path.join(app.getPath('documents'), `ricevute-${new Date().toISOString().slice(0, 10)}.pdf`), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
     if (r.canceled || !r.filePath) return { canceled: true };
     const pdf = await withPrintWindow(html, (w) => w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, margins: { marginType: 'none' } }));
     fs.writeFileSync(r.filePath, pdf);
-    return { saved: r.filePath, ...done() };
+    return { saved: r.filePath };
   }
 
   const result = await withPrintWindow(html, (w) => new Promise((resolve) => {
     w.webContents.print({ silent: false, printBackground: true, pageSize: 'A4', margins: { marginType: 'none' } }, (success, reason) => resolve({ success, reason }));
   }));
   if (!result.success) return { canceled: true, reason: result.reason };
-  return { printed: true, ...done() };
+  return { printed: true };
+});
+
+// Le ricevute si segnano come stampate solo dopo la conferma esplicita dell'utente: la finestra di stampa
+// risponde "riuscita" anche quando si guarda solo l'anteprima.
+handle('print:commit', async ({ receipts, nextReceipt }) => {
+  if (!receipts || !receipts.length) throw new Error('Nessuna ricevuta da segnare.');
+  S.commitPrint(state, receipts, nextReceipt); saveState(); return snapshot();
 });
 
 // ---------- Avvio ----------

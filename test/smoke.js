@@ -228,6 +228,15 @@ module.exports = ({ win, state, saveState, S, app }) => {
         log('dopo conferma: bonifici registrati =', Object.values(st.bank).filter((b) => b.status === 'confermato').length, '| alias salvati =', JSON.stringify(Object.keys(st.bankAliases)));
         log('stampa dai bonifici: righe =', await js(`openPrintDialog.current.receipts.map(r=>r.tipo+':'+(r.periodo||'-')+':'+r.quota+':'+r.method+':'+r.date)`).then(JSON.stringify), '| avvisi =', await js(`openPrintDialog.current.issues.length`));
         await shot('31-stampa-da-bonifici');
+        // conferma reale di stampa: "No" non segna nulla, "Sì" segna
+        const nrec = st.receipts.length;
+        await js(`askPrintedConfirm(openPrintDialog.current,'print')`); await wait(200);
+        await shot('31b-conferma-stampa');
+        await js(`document.querySelector('[data-pc=no]').click()`); await wait(300);
+        log('conferma stampa: dopo "No" ricevute emesse =', st.receipts.length - nrec, '| dialogo ancora aperto =', await js(`!!openPrintDialog.current && !!document.querySelector('.modal')`));
+        await js(`askPrintedConfirm(openPrintDialog.current,'print')`); await wait(200);
+        await js(`document.querySelector('[data-pc=yes]').click()`); await wait(800);
+        log('conferma stampa: dopo "Sì" ricevute emesse =', st.receipts.length - nrec, '| overlay chiuso =', await js(`!document.querySelector('.overlay')`));
         await js(`closeModal()`);
         await js(`window.api.dashboardData().then(d=>window.__dd=d)`); await wait(300);
         log('dashboard: bonifici in attesa di ricevuta =', await js(`window.__dd.ricevute.bonificiInAttesa`), '| da fare =', await js(`window.__dd.attenzione.filter(x=>x.id==='bonifici').map(x=>x.n).join()`));
