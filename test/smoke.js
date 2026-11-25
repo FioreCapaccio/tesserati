@@ -20,13 +20,15 @@ module.exports = ({ win, state, saveState, S, app }) => {
       const st = state();
       // Primo import reale + 2 nuovi iscritti
       const { records } = readMembers(fs.readFileSync(process.env.TESSERATI_CSV));
-      S.importRecords(st, records, { file: 'Younity.csv' });
+      S.importRecords(st, records, { file: 'export.csv' });
       st.settings.assoc = { nome: 'Associazione Culturale Teatrale “Il Sipario”', indirizzo: 'Via del Teatro 12, 65100 Pescara', cf: '91012345678', telefono: '085 1234567', email: 'info@ilsipario.it', logo: '', nota: 'Ricevuta di tesseramento per quota associativa, non soggetta a IVA.' };
       st.settings.nextReceipt = 124;
       st.settings.receiptPrefix = '2026/';
       const nuovi = records.slice(0, 5).map((r, i) => ({ ...r, id: '99000' + i, iscrizione: '2026-10-0' + (i + 1), scadenza: '2027-09-30', nome: ['Giulia', 'Marco', 'Anna Maria', 'Luca', 'Chiara'][i], cognome: ['Bianchi', 'D’Angelo', 'De Luca', 'Verdi', 'Esposito'][i], cf: 'XXXXXX00X00X000' + i }));
       S.importRecords(st, nuovi, { file: 'Younity.csv' });
       saveState();
+      const ordered = Object.values(st.persons).filter((p) => !String(p.id).startsWith('99000')).sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
+      const PA = ordered[0].id, PB = ordered[1].id;     // due tesserati qualsiasi, scelti qui: nessun dato reale scritto nel codice
       win.reload();
       await new Promise((r) => win.webContents.once('did-finish-load', r));
       await wait(500);
@@ -118,15 +120,15 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await shot('20-doppione');
       await js(`closeModal()`);
       // modifica di un tesserato del CSV
-      const csvKey = Object.values(st.memberships).find((m) => !m.manual && m.personId === '9000002').key;
+      const csvKey = Object.values(st.memberships).find((m) => !m.manual && m.personId === PA).key;
       await js(`document.querySelector('tr[data-key="${csvKey}"]').click()`); await wait(300);
       await js(`document.querySelector('[data-act=edit-person]').click()`); await wait(300);
       log('iscrizione CSV bloccata =', await js(`document.getElementById('pf-isc').disabled`));
       await setv('pf-email', 'Nuova.Email@Esempio.it'); await setv('pf-citta', 'Chieti');
       await js(`document.querySelector('[data-act=save-person]').click()`); await wait(800);
-      const pe = st.persons['9000002'];
+      const pe = st.persons[PA];
       log('modifica salvata =', pe.email, pe.citta, JSON.stringify(pe.overrides));
-      S.importRecords(st, records, { file: 'Younity.csv' }); saveState();
+      S.importRecords(st, records, { file: 'export.csv' }); saveState();
       log('dopo rilettura del CSV: email =', pe.email, '| città =', pe.citta, '(la modifica resta)');
       await js(`window.api.getState().then(r=>{setData(r);render()})`); await wait(300);
       await shot('21-scheda-modificata');
@@ -144,21 +146,21 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await js(`document.querySelector('[data-act=delete-person]').click()`); await wait(300);
       await shot('23-conferma-eliminazione');
       await js(`document.querySelector('[data-act=delete-go]').click()`); await wait(800);
-      log('eliminato -> nel cestino =', !!st.trash['9000002'], '| attivo =', !!st.persons['9000002'], '| tessere rimaste =', Object.values(st.memberships).filter((m) => m.personId === '9000002').length);
-      const rep2 = S.importRecords(st, records, { file: 'Younity.csv' });
-      log('rilettura CSV: ignorati =', rep2.ignorati, '| tornato attivo =', !!st.persons['9000002'], '| nuovi =', rep2.nuovi);
+      log('eliminato -> nel cestino =', !!st.trash[PA], '| attivo =', !!st.persons[PA], '| tessere rimaste =', Object.values(st.memberships).filter((m) => m.personId === PA).length);
+      const rep2 = S.importRecords(st, records, { file: 'export.csv' });
+      log('rilettura CSV: ignorati =', rep2.ignorati, '| tornato attivo =', !!st.persons[PA], '| nuovi =', rep2.nuovi);
       await js(`document.querySelector('[data-nav=impostazioni]').click()`); await wait(300);
       win.setSize(1440, 2900); await wait(500);
       await js(`document.querySelector('[data-act=trash-restore]').scrollIntoView()`);
       await shot('24-cestino');
       win.setSize(1440, 900); await wait(300);
       await js(`document.querySelector('[data-act=trash-restore]').click()`); await wait(600);
-      log('ripristinato =', !!st.persons['9000002'] && !st.trash['9000002'], '| tessere =', Object.values(st.memberships).filter((m) => m.personId === '9000002').length);
+      log('ripristinato =', !!st.persons[PA] && !st.trash[PA], '| tessere =', Object.values(st.memberships).filter((m) => m.personId === PA).length);
 
       // ---- corsisti ----
       const keyOf = (pid) => Object.values(st.memberships).find((m) => m.personId === pid && !m.manual || m.personId === pid).key;
       await js(`document.querySelector('[data-nav=lista]').click()`); await wait(300);
-      for (const pid of ['9000002', '9000003']) {
+      for (const pid of [PA, PB]) {
         await js(`document.querySelector('tr[data-key="${keyOf(pid)}"]').click()`); await wait(300);
         await js(`document.getElementById('corsista').click()`); await wait(500);
       }
@@ -169,18 +171,18 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await js(`document.querySelector('[data-nav=corsisti]').click()`); await wait(1200);
       log('menu: voci calendario =', JSON.stringify(await js(`[...document.querySelectorAll('.nav span:nth-child(2)')].map(e=>e.textContent).filter(t=>/Calendario/.test(t))`)), '| stagione =', await js(`App.corsi.label`), '| voci =', await js(`App.corsi.items.length`), '| mese iniziale =', await js(`App.corsi.months[App.cs.mi]`));
       await shot('25-calendario-corsisti-mese');
-      const entry = '9000002|2026-11';
+      const entry = `${PA}|2026-11`;
       await js(`document.querySelector('[data-act=cs-pay][data-e="${entry}"]').click()`); await wait(900);
-      log('pagato a mano: stato =', JSON.stringify(st.persons['9000002'].corso && st.persons['9000002'].corso['2026']['2026-11'] && st.persons['9000002'].corso['2026']['2026-11'].status));
-      await js(`document.querySelector('[data-act=cs-skip][data-e="9000003|iscrizione"]').click()`); await wait(900);
+      log('pagato a mano: stato =', JSON.stringify(st.persons[PA].corso && st.persons[PA].corso['2026']['2026-11'] && st.persons[PA].corso['2026']['2026-11'].status));
+      await js(`document.querySelector('[data-act=cs-skip][data-e="${PB}|iscrizione"]').click()`); await wait(900);
       await js(`document.querySelector('[data-cs=stagione]').click()`); await wait(900);
-      await js(`document.querySelector('[data-csc="9000003|2026-12"]').click()`); await wait(900);
-      log('matrice: dicembre pagato =', st.persons['9000003'].corso['2026']['2026-12'].status, '| iscrizione non dovuta =', st.persons['9000003'].corso['2026']['iscrizione'].status);
+      await js(`document.querySelector('[data-csc="${PB}|2026-12"]').click()`); await wait(900);
+      log('matrice: dicembre pagato =', st.persons[PB].corso['2026']['2026-12'].status, '| iscrizione non dovuta =', st.persons[PB].corso['2026']['iscrizione'].status);
       await shot('26-calendario-corsisti-stagione');
       await js(`document.querySelector('[data-cs=mese]').click()`); await wait(900);
       // stampa: retta + iscrizione di novembre per la stessa persona
-      await js(`document.querySelector('[data-cssel="9000002|iscrizione"]').click()`); await wait(400);
-      await js(`document.querySelector('[data-cssel="9000002|2026-11"]').click()`); await wait(400);
+      await js(`document.querySelector('[data-cssel="${PA}|iscrizione"]').click()`); await wait(400);
+      await js(`document.querySelector('[data-cssel="${PA}|2026-11"]').click()`); await wait(400);
       log('selezionate per la stampa =', await js(`App.cs.sel.size`));
       await js(`document.querySelector('[data-act=cs-bulk-print]').click()`); await wait(1200);
       const cr = await js(`openPrintDialog.current.receipts.map(r=>r.tipo+':'+r.periodo+':'+r.no)`);
@@ -190,10 +192,10 @@ module.exports = ({ win, state, saveState, S, app }) => {
       await shot('27-stampa-corsista');
       const payload = await js(`({receipts: openPrintDialog.current.receipts, nextReceipt: openPrintDialog.current.nextReceipt})`);
       await js(`closeModal()`);
-      S.updateMemberships(st, [keyOf('9000002')], { printed: true });
+      S.updateMemberships(st, [keyOf(PA)], { printed: true });
       S.commitPrint(st, payload.receipts, payload.nextReceipt); saveState();   // come dopo una stampa riuscita
       await js(`window.api.getState().then(r=>{setData(r);render()})`); await wait(1200);
-      const cp = st.persons['9000002'].corso['2026'];
+      const cp = st.persons[PA].corso['2026'];
       log('dopo la stampa: iscrizione =', cp.iscrizione.status, 'n°', cp.iscrizione.no, '| novembre =', cp['2026-11'].status, 'n°', cp['2026-11'].no, '| automatico =', cp['2026-11'].manual === false);
       await shot('28-corsisti-dopo-stampa');
 

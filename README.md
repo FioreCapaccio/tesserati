@@ -42,7 +42,7 @@ I dati restano solo sul computer.
 ```
 npm install
 npm start            # avvia l'app
-npm test             # test della logica (usa ../Younity.csv se presente)
+npm test             # test della logica (con un CSV reale: TESSERATI_TEST_CSV=/percorso/file.csv npm test; con un estratto PDF reale: TESSERATI_TEST_PDF=...)
 npm run dist:mac     # dmg + zip per Mac Apple Silicon -> dist/
 npm run dist:win     # installer + zip per Windows x64 -> dist/
 ```

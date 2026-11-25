@@ -5,7 +5,8 @@ const path = require('path');
 const { readMembers, parseCsv } = require('../core/csv');
 const S = require('../core/store');
 
-const csvPath = process.argv[2] || path.join(__dirname, '..', '..', 'Younity.csv');
+// Prove facoltative su un CSV reale dei tesserati: TESSERATI_TEST_CSV=/percorso/file.csv npm test (oppure come primo argomento). Se manca, si saltano.
+const csvPath = process.argv[2] || process.env.TESSERATI_TEST_CSV || '';
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log('ok -', name); };
 
@@ -22,20 +23,20 @@ if (fs.existsSync(csvPath)) {
     console.log('   righe:', records.length);
   });
   t('pulizia nomi e province', () => {
-    const r = records.find((x) => x.id === '9000001');
-    assert.strictEqual(r.nome, 'Mario');
-    assert.strictEqual(r.cognome, 'Rossi');
+    assert.ok(records.every((x) => x.nome === x.nome.trim() && x.cognome === x.cognome.trim() && !/\s{2}/.test(x.nome + x.cognome)));
+    assert.ok(records.every((x) => x.nome !== x.nome.toLowerCase() || !/[a-z]{4}/.test(x.nome)));   // nessun nome tutto minuscolo
     assert.ok(records.every((x) => x.provNascita !== 'NULL'));
     assert.ok(records.every((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.scadenza)));
   });
 
   const state = S.emptyState();
   let rep;
-  t('primo import: tutto già stampato, 561 persone, 571 tessere (1 riga doppia unita)', () => {
-    rep = S.importRecords(state, records, { file: 'Younity.csv' });
-    assert.strictEqual(Object.keys(state.persons).length, 561);
-    assert.strictEqual(Object.keys(state.memberships).length, 571);
-    assert.strictEqual(rep.avvisi.filter((a) => a.startsWith('Riga doppia')).length, 1);
+  const nPersone = new Set(records.map((r) => r.id)).size, nTessere = new Set(records.map((r) => `${r.id}_${r.iscrizione}`)).size;
+  t('primo import: tutto già stampato, persone e tessere distinte, righe doppie unite', () => {
+    rep = S.importRecords(state, records, { file: 'export.csv' });
+    assert.strictEqual(Object.keys(state.persons).length, nPersone);
+    assert.strictEqual(Object.keys(state.memberships).length, nTessere);
+    assert.strictEqual(rep.avvisi.filter((a) => a.startsWith('Riga doppia')).length, records.length - nTessere);
     assert.ok(Object.values(state.memberships).every((m) => m.printed));
     assert.strictEqual(rep.nuoviKeys.length, 0);
   });
@@ -55,7 +56,7 @@ if (fs.existsSync(csvPath)) {
     assert.strictEqual(rep.nuoviKeys.length, 2);
     assert.ok(rep.nuoviKeys.every((k) => state.memberships[k].printed === false));
     assert.strictEqual(Object.values(state.memberships).filter((m) => !m.printed).length, 2);
-    assert.strictEqual(Object.keys(state.persons).length, 562);
+    assert.strictEqual(Object.keys(state.persons).length, nPersone + 1);
   });
   t('stampa: commit imposta flag, numero, prossimo progressivo', () => {
     const keys = Object.values(state.memberships).filter((m) => !m.printed).map((m) => m.key);
@@ -517,11 +518,12 @@ console.log(`\n${n} test superati`);
       const d = D.dashboard(s, TODAY);
       const latest = new Map(); for (const m of Object.values(s.memberships)) { const c = latest.get(m.personId); if (!c || m.iscrizione > c.iscrizione) latest.set(m.personId, m); }
       const all = [...latest.values()];
-      assert.strictEqual(d.tessere.totale, 561); assert.strictEqual(all.length, 561);
+      const nP = new Set(Object.values(s.memberships).map((m) => m.personId)).size;
+      assert.strictEqual(d.tessere.totale, nP); assert.strictEqual(all.length, nP);
       assert.strictEqual(d.tessere.valide, all.filter((m) => m.stato === 'Attivo' && m.scadenza >= TODAY).length);
       assert.strictEqual(d.tessere.scadute, all.filter((m) => m.stato === 'Attivo' && m.scadenza < TODAY).length);
       assert.strictEqual(d.tessere.sospese, all.filter((m) => m.stato !== 'Attivo').length);
-      assert.strictEqual(d.eta.fasce.reduce((a, x) => a + x.n, 0), 561);
+      assert.strictEqual(d.eta.fasce.reduce((a, x) => a + x.n, 0), nP);
       console.log(`   oggi (${TODAY}): totale ${d.tessere.totale} · valide ${d.tessere.valide} · scadute ${d.tessere.scadute} · sospese ${d.tessere.sospese} · in scadenza ${d.tessere.inScadenza} · minorenni ${d.eta.minorenni} · età media ${d.eta.media}`);
     });
   }
@@ -693,28 +695,33 @@ console.log(`\n${n} test superati`);
     assert.ok(B.verifyBackup(old).ok);
   });
 
-  // ---- file veri: Excel/CSV di prova e il PDF del campione (saltato se non c'è) ----
+  // ---- file veri: Excel e CSV generati qui con dati inventati; il PDF di un estratto reale solo se indicato (TESSERATI_TEST_PDF) ----
   (async () => {
-    const x = await readStatement(path.join(__dirname, 'fixtures', 'estratto-prova.xlsx'));
-    t('file: Excel di prova — colonne riconosciute da sole', () => {
-      assert.deepStrictEqual(x.movements.map((m) => [m.date, m.avere, m.dare]), [['2026-10-05', 125, null], ['2026-10-06', 80, null], ['2026-10-07', null, 0.69], ['2026-10-08', 55, null]]);
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'bank-'));
+    const writeExcelFile = require('write-excel-file/node').default;
+    const D = (y, m, d) => ({ value: new Date(Date.UTC(y, m - 1, d)), format: 'dd/mm/yyyy' });
+    await writeExcelFile([[{ value: 'Prospetto di prova' }], [], ['Data contabile', 'Data valuta', 'Descrizione', 'Entrate', 'Uscite'].map((value) => ({ value })),
+      [D(2026, 10, 5), D(2026, 10, 5), { value: 'BONIFICO DA ROSSI ANNA MARIA Quota rata novembre' }, { value: 125 }, { value: null }],
+      [D(2026, 10, 6), D(2026, 10, 6), { value: 'Bonifico da BIANCHI LUISA iscrizione corso Neri Zoe' }, { value: 80 }, { value: null }],
+      [D(2026, 10, 7), D(2026, 10, 7), { value: 'Commissioni su bonifico' }, { value: null }, { value: 0.69 }]]).toFile(path.join(dir, 'prova.xlsx'));
+    fs.writeFileSync(path.join(dir, 'prova.csv'), 'Data;Valuta;Causale;Importo\n05/10/2026;05/10/2026;"BONIFICO DA ROSSI ANNA MARIA Quota rata novembre";"125,00"\n07/10/2026;07/10/2026;"Commissioni";"-0,69"\n09/10/2026;09/10/2026;"Accredito bonifico VERDI LUCA tessera";"20,00"\n');
+    const x = await readStatement(path.join(dir, 'prova.xlsx'));
+    t('file: Excel generato nel test — colonne riconosciute da sole', () => {
+      assert.deepStrictEqual(x.movements.map((m) => [m.date, m.avere, m.dare]), [['2026-10-05', 125, null], ['2026-10-06', 80, null], ['2026-10-07', null, 0.69]]);
     });
-    const c = await readStatement(path.join(__dirname, 'fixtures', 'estratto-prova.csv'));
-    t('file: CSV di prova con punto e virgola e importo con segno', () => {
+    const c = await readStatement(path.join(dir, 'prova.csv'));
+    t('file: CSV con punto e virgola e importo con segno', () => {
       assert.deepStrictEqual(c.movements.map((m) => [m.date, m.avere, m.dare]), [['2026-10-05', 125, null], ['2026-10-07', null, 0.69], ['2026-10-09', 20, null]]);
     });
-    const pdf = path.join(__dirname, '..', '..', 'estratto.PDF');
-    if (fs.existsSync(pdf)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    const pdf = process.env.TESSERATI_TEST_PDF;
+    if (pdf && fs.existsSync(pdf)) {
       const p = await readStatement(pdf);
-      t('file: PDF campione BCC — quadratura al centesimo e bonifici trovati', () => {
+      t('file: PDF reale (se indicato) — i movimenti quadrano con i saldi', () => {
         const q = K.reconcile(p);
-        assert.ok(q.ok, JSON.stringify(q));
-        assert.deepStrictEqual([q.saldoIniziale, q.entrate, q.uscite, q.saldoFinale], [2500, 1000, 29.5, 3470.5]);
-        assert.strictEqual(p.movements.length, 128);
-        const inc = p.movements.filter((m) => m.avere > 0 && K.isBonifico(m.descr));
-        assert.strictEqual(inc.length, 9);
-        assert.ok(inc.every((m) => /^\d{4}-\d{2}-\d{2}$/.test(m.date) && m.descr.length > 10));
-        console.log(`   PDF campione: ${p.movements.length} movimenti, quadratura ${q.differenza === 0 ? 'ok' : 'NO'}, ${inc.length} bonifici in entrata`);
+        assert.ok(q && q.ok, JSON.stringify(q));
+        assert.ok(p.movements.length > 0 && p.movements.every((m) => /^\d{4}-\d{2}-\d{2}$/.test(m.date) && m.descr.length > 0));
+        console.log(`   PDF reale: ${p.movements.length} movimenti, quadratura ${q.differenza === 0 ? 'ok' : 'NO'}`);
       });
     }
     console.log(`\n${n} test superati (con i file veri)`);

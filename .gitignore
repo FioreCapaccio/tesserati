@@ -4,4 +4,3 @@ dist/
 .DS_Store
 tesserati-data*.json
 tesserati-backup*.json
-!test/fixtures/*.csv
