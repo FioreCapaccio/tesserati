@@ -207,6 +207,17 @@ module.exports = ({ win, state, saveState, S, app }) => {
       log('estratto:', JSON.stringify(bres));
       log('abbinati =', JSON.stringify(await js(`App.bk.res.proposals.filter(p=>p.personId).map(p=>({imp:p.importo, a:App.data.persons[p.personId].cognome+' '+App.data.persons[p.personId].nome, how:p.candidates[0].how, voce:App.bk.rows[p.hash].target, c:p.confidence}))`)));
       await shot('30-bonifici-proposte');
+      // riga non abbinata: la casella chiede il tesserato, il selettore abbina e spunta
+      const un = await js(`(App.bk.res.proposals.find(p=>!App.bk.rows[p.hash].personId)||{}).hash||''`);
+      if (un) {
+        await js(`document.querySelector('[data-bkinc="${un}"]').click()`); await wait(300);
+        log('casella senza abbinamento apre il selettore =', await js(`!!document.querySelector('#bp-q')`));
+        await js(`document.querySelector('#bp-q').value=${JSON.stringify((st.persons[PA].cognome||'').slice(0,4))};document.querySelector('#bp-q').dispatchEvent(new Event('input'))`); await wait(200);
+        await shot('30b-selettore-tesserato');
+        await js(`document.querySelector('.bpitem').click()`); await wait(300);
+        log('dopo la scelta: abbinato =', await js(`!!App.bk.rows['${un}'].personId`), '| incluso =', await js(`App.bk.rows['${un}'].inc`));
+        await js(`App.bk.rows['${un}'].personId=null;App.bk.rows['${un}'].inc=false;render()`);
+      }
       // i tesserati abbinati devono essere corsisti per le rate: li segno e confermo
       const matched = await js(`App.bk.res.proposals.filter(p=>p.personId && App.bk.rows[p.hash].inc).map(p=>p.personId)`);
       for (const id of matched) S.updatePerson(st, id, { corsista: true });

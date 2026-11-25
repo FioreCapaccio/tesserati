@@ -450,7 +450,6 @@ function bonificiView() {
     <button class="btn primary" data-act="bank-open">${ICON.bank} ${bk ? 'Carica un altro estratto' : 'Carica estratto conto…'}</button></div>`;
   if (!bk) return head + '<div class="empty"><h2>Nessun estratto caricato</h2><p>Scegli il file scaricato dalla banca. Controllo anche che i movimenti quadrino con i saldi, così so che la lettura è completa.</p></div>';
   const r = bk.res, q = r.quadratura;
-  const people = Object.values(App.data.persons).sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
   const sel = r.proposals.filter((p) => bk.rows[p.hash].inc && bk.rows[p.hash].personId);
   const tot = sel.reduce((a, p) => a + p.importo, 0);
   const summary = `<div class="bkbar"><span><b>${esc(r.name)}</b>${r.periodo ? ` · dal ${fmt(r.periodo.da)} al ${fmt(r.periodo.a)}` : ''} · ${nfmt(r.movimenti)} movimenti</span>
@@ -466,22 +465,47 @@ function bonificiView() {
       person && st.target === 'tessera' && Object.values(App.data.memberships).some((m) => m.personId === person.id && m.printed && !m.bonifico) ? '<span class="why">la tessera ha già una ricevuta stampata</span>' : '',
       person && st.target !== 'tessera' && !person.corsista ? '<span class="why">alla conferma verrà segnato come corsista</span>' : ''].filter(Boolean).join(' · ');
     return `<tr data-bkrow="${esc(p.hash)}" class="bk-${p.confidence}">
-      <td class="cbx"><input type="checkbox" data-bkinc="${esc(p.hash)}" ${st.inc ? 'checked' : ''} ${st.personId ? '' : 'disabled'} aria-label="Includi"></td>
+      <td class="cbx"><input type="checkbox" data-bkinc="${esc(p.hash)}" ${st.inc ? 'checked' : ''} aria-label="Includi" title="${person ? 'Includi nella conferma' : 'Prima scegli a chi abbinarlo'}"></td>
       <td class="num">${fmt(p.date)}</td><td class="num"><b>${eur(p.importo)}</b></td>
       <td><div class="bkdesc" title="${esc(p.descr)}">${esc(p.descr)}</div>${notes ? `<div class="bknotes">${notes}</div>` : ''}</td>
-      <td><input class="field" list="bk-people" data-bkp="${esc(p.hash)}" value="${person ? esc(personLabel(person)) : ''}" placeholder="Cerca un tesserato…" autocomplete="off" aria-label="Abbinato a"></td>
+      <td><button class="btn sm ${person ? '' : 'primary'} bkpick" data-act="bank-pick" data-h="${esc(p.hash)}" title="${person ? 'Cambia il tesserato' : 'Scegli il tesserato a cui abbinarlo'}">${person ? esc(`${person.cognome} ${person.nome}`) : 'Abbina a un tesserato…'}</button></td>
       <td><select class="field" data-bkv="${esc(p.hash)}" ${person ? '' : 'disabled'} aria-label="Per">${opts.map((o) => `<option value="${esc(o)}" ${o === st.target ? 'selected' : ''}>${esc(voceLabel(o))}</option>`).join('')}</select></td>
       <td><span class="badge ${cls}">${lab}</span></td>
       <td><button class="btn sm ghost" data-act="bank-ignore" data-h="${esc(p.hash)}" title="Non è un pagamento di un tesserato: non riproporlo">Ignora</button></td></tr>`;
   }).join('');
-  return head + summary + (r.proposals.length ? `<datalist id="bk-people">${people.map((p) => `<option value="${esc(personLabel(p))}"></option>`).join('')}</datalist>
-    <div class="tablewrap"><table class="bktable"><thead><tr><th class="cbx"><input type="checkbox" id="bk-all" ${sel.length === r.proposals.length ? 'checked' : ''} aria-label="Seleziona tutti"></th><th>Data</th><th>Importo</th><th>Ordinante e causale</th><th>Abbinato a</th><th>Per</th><th>Esito</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+  return head + summary + (r.proposals.length ? `<div class="tablewrap"><table class="bktable"><thead><tr><th class="cbx"><input type="checkbox" id="bk-all" ${sel.length === r.proposals.length ? 'checked' : ''} aria-label="Seleziona tutti"></th><th>Data</th><th>Importo</th><th>Ordinante e causale</th><th>Abbinato a</th><th>Per</th><th>Esito</th><th></th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
     <div class="bkfoot"><span><b>${sel.length}</b> selezionat${sel.length === 1 ? 'o' : 'i'} · ${eur(tot)}</span>
       <button class="btn" data-act="bank-confirm" ${sel.length ? '' : 'disabled'}>Conferma selezionati</button>
       <button class="btn primary" data-act="bank-confirm-print" ${sel.length ? '' : 'disabled'}>${ICON.print} Conferma e prepara le ricevute</button></div>`
     : `<div class="empty"><h2>Nessun bonifico da controllare</h2><p>${r.registrati ? 'Quelli di questo estratto sono già stati registrati.' : 'In questo estratto non ci sono bonifici in entrata. Prova “Mostra anche le altre entrate”.'}</p></div>`);
 }
 
+function bkAssign(hash, personId) {
+  const st = App.bk.rows[hash], pr = App.bk.res.proposals.find((x) => x.hash === hash);
+  st.personId = personId; st.inc = !!personId;
+  if (personId && !voceOptionsFor(App.data.persons[personId], pr.date, null).includes(st.target)) st.target = 'tessera';
+  render();
+}
+function bkPickModal(hash) {
+  const pr = App.bk.res.proposals.find((x) => x.hash === hash);
+  const people = Object.values(App.data.persons).sort((a, b) => `${a.cognome} ${a.nome}`.localeCompare(`${b.cognome} ${b.nome}`, 'it'));
+  const norm = (x) => String(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  openModal(`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><header><h2 id="mt">A chi appartiene questo bonifico?</h2></header>
+    <div class="mbody"><p style="margin:0 0 10px;color:var(--muted)">${fmt(pr.date)} · <b>${eur(pr.importo)}</b> · ${esc(pr.descr)}</p>
+      <input class="field" id="bp-q" placeholder="Scrivi cognome o nome…" autocomplete="off" aria-label="Cerca un tesserato">
+      <div id="bp-list" class="bplist" role="listbox"></div></div>
+    <footer><button class="btn" data-act="close-modal">Annulla</button></footer></div>`, () => {
+    const q = $('#bp-q'), list = $('#bp-list');
+    const draw = () => {
+      const words = norm(q.value).split(/\s+/).filter(Boolean);
+      const hits = people.filter((p) => { const t = norm(`${p.cognome} ${p.nome}`); return words.every((w) => t.includes(w)); });
+      list.innerHTML = hits.slice(0, 60).map((p) => `<button class="bpitem" data-pid="${esc(p.id)}"><b>${esc(p.cognome)} ${esc(p.nome)}</b><span>ID ${esc(p.id)}${p.citta ? ' · ' + esc(p.citta) : ''}</span></button>`).join('')
+        + (hits.length > 60 ? `<p class="why">…altri ${hits.length - 60}: scrivi di più per restringere.</p>` : '') + (hits.length ? '' : '<p class="why">Nessun tesserato trovato.</p>');
+    };
+    q.addEventListener('input', draw); draw(); q.focus();
+    list.addEventListener('click', (e) => { const b = e.target.closest('[data-pid]'); if (b) { closeModal(); bkAssign(hash, b.dataset.pid); } });
+  });
+}
 function bkItems(hashes) {
   const bk = App.bk;
   return hashes.map((h) => { const p = bk.res.proposals.find((x) => x.hash === h), st = bk.rows[h]; return { hash: h, date: p.date, valuta: p.valuta, importo: p.importo, descr: p.descr, payerKey: p.payerKey, personId: st.personId, targetKey: st.target }; });
@@ -1508,6 +1532,7 @@ document.addEventListener('click', async (e) => {
         App.bk.res.proposals = App.bk.res.proposals.filter((x) => x.hash !== p.hash); render(); toast('Non verrà riproposto.');
         break;
       }
+      case 'bank-pick': bkPickModal(act.dataset.h); break;
       case 'bank-confirm': await bkConfirm(false); break;
       case 'bank-confirm-print': await bkConfirm(true); break;
       case 'bank-print-last': closeModal(); openPrintDialog(null, { rows: App.bk.lastRows }); break;
@@ -1574,16 +1599,13 @@ document.addEventListener('change', (e) => {
     renderTable();
   } else if (t.hasAttribute('data-cal-hidden')) { App.cal.showHidden = t.checked; render(); }
   else if (t.id === 'm-provider') $('#m-custom').hidden = t.value !== 'altro';
-  else if (t.dataset.bkinc) { App.bk.rows[t.dataset.bkinc].inc = t.checked; render(); }
+  else if (t.dataset.bkinc) {
+    const st = App.bk.rows[t.dataset.bkinc];
+    if (t.checked && !st.personId) { t.checked = false; toast('Prima scegli il tesserato.'); bkPickModal(t.dataset.bkinc); } else { st.inc = t.checked; render(); }
+  }
   else if (t.id === 'bk-all') { App.bk.res.proposals.forEach((p) => { if (App.bk.rows[p.hash].personId) App.bk.rows[p.hash].inc = t.checked; }); render(); }
   else if (t.hasAttribute('data-bkall')) bkReload({ all: t.checked }).catch((e) => toast('Errore: ' + e.message));
   else if (t.dataset.bkv) { App.bk.rows[t.dataset.bkv].target = t.value; render(); }
-  else if (t.dataset.bkp) {
-    const m = /\(ID ([^)]+)\)\s*$/.exec(t.value), st = App.bk.rows[t.dataset.bkp], pr = App.bk.res.proposals.find((x) => x.hash === t.dataset.bkp);
-    st.personId = m && App.data.persons[m[1]] ? m[1] : null;
-    if (st.personId) { const person = App.data.persons[st.personId]; if (!voceOptionsFor(person, pr.date, null).includes(st.target)) st.target = 'tessera'; st.inc = true; } else st.inc = false;
-    render();
-  }
   else if (t.dataset.cssel) { t.checked ? App.cs.sel.add(t.dataset.cssel) : App.cs.sel.delete(t.dataset.cssel); render(); }
   else if (t.id === 'av-all') { App.avvisi.groups.forEach((g) => (t.checked ? App.avSel.add(g.email) : App.avSel.delete(g.email))); render(); }
   else if (t.dataset.avsel) { t.checked ? App.avSel.add(t.dataset.avsel) : App.avSel.delete(t.dataset.avsel); render(); }

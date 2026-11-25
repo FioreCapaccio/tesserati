@@ -366,3 +366,9 @@ dl.kv.kv-wide { grid-template-columns: 220px 1fr; margin-top: 8px; }
 .bk-alta td:first-child { box-shadow: inset 4px 0 0 var(--grn-bd); } .bk-media td:first-child { box-shadow: inset 4px 0 0 var(--yel-bd); } .bk-bassa td:first-child { box-shadow: inset 4px 0 0 var(--red-bd); }
 .bkfoot { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; justify-content: flex-end; padding: 12px 14px; margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
 .bkfoot span { margin-right: auto; }
+
+.bkpick { max-width: 230px; white-space: normal; text-align: left; }
+.bplist { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 340px; overflow: auto; }
+.bpitem { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.bpitem:hover, .bpitem:focus-visible { border-color: var(--accent, currentColor); background: var(--hover, var(--bg)); }
+.bpitem span { color: var(--muted); font-size: 13px; }
